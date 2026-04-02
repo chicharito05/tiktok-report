@@ -102,6 +102,8 @@ export default function PostsManager({ clients }: PostsManagerProps) {
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedContentIds, setExpandedContentIds] = useState<Set<string>>(new Set());
+  const [loadedContents, setLoadedContents] = useState<Record<string, string>>({});
+  const [loadingContentId, setLoadingContentId] = useState<string | null>(null);
   // フォロワー数管理
   const [showFollowerPanel, setShowFollowerPanel] = useState(false);
   const [followerSnapshots, setFollowerSnapshots] = useState<{ id?: string; date: string; follower_count: number }[]>([]);
@@ -375,13 +377,37 @@ export default function PostsManager({ clients }: PostsManagerProps) {
     }
   };
 
-  const toggleContentExpand = (postId: string) => {
-    setExpandedContentIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(postId)) next.delete(postId);
-      else next.add(postId);
-      return next;
-    });
+  const toggleContentExpand = async (postId: string) => {
+    // 閉じる場合
+    if (expandedContentIds.has(postId)) {
+      setExpandedContentIds((prev) => {
+        const next = new Set(prev);
+        next.delete(postId);
+        return next;
+      });
+      return;
+    }
+    // 既にロード済みならすぐ開く
+    if (loadedContents[postId]) {
+      setExpandedContentIds((prev) => new Set(prev).add(postId));
+      return;
+    }
+    // 1件だけ原稿を取得
+    setLoadingContentId(postId);
+    try {
+      const res = await fetch(`/api/posts/content?post_id=${postId}`);
+      const data = await res.json();
+      if (res.ok && data.notion_content) {
+        setLoadedContents((prev) => ({ ...prev, [postId]: data.notion_content }));
+        setExpandedContentIds((prev) => new Set(prev).add(postId));
+      } else {
+        showToast("error", "原稿の取得に失敗しました");
+      }
+    } catch {
+      showToast("error", "原稿の取得に失敗しました");
+    } finally {
+      setLoadingContentId(null);
+    }
   };
 
   // --- 投稿手動追加 ---
@@ -974,14 +1000,24 @@ export default function PostsManager({ clients }: PostsManagerProps) {
                         {/* タイトル（編集可能）+ 原稿取得済みバッジ */}
                         <td className="px-4 py-2">
                           <div className="flex items-center gap-1.5">
-                            {(post.has_notion_content || (post.notion_content && post.notion_content !== "(取得済み)")) ? (
-                              <span
-                                className="flex-shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-600"
-                                title="原稿本文あり"
+                            {post.has_notion_content ? (
+                              <button
+                                onClick={() => toggleContentExpand(post.id)}
+                                disabled={loadingContentId === post.id}
+                                className={`flex-shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors cursor-pointer ${
+                                  expandedContentIds.has(post.id)
+                                    ? "bg-emerald-200 text-emerald-800"
+                                    : "bg-emerald-50 text-emerald-600 hover:bg-emerald-100"
+                                }`}
+                                title="原稿本文を表示/非表示"
                               >
-                                <FileText size={11} />
+                                {loadingContentId === post.id ? (
+                                  <Loader2 size={11} className="animate-spin" />
+                                ) : (
+                                  <FileText size={11} />
+                                )}
                                 原稿
-                              </span>
+                              </button>
                             ) : (
                               <span className="flex-shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-50 text-gray-300">
                                 <FileText size={11} />
@@ -1087,7 +1123,23 @@ export default function PostsManager({ clients }: PostsManagerProps) {
                           </div>
                         </td>
                       </tr>
-                      {/* 原稿本文展開行は一覧では非表示（パフォーマンス最適化） */}
+                      {/* 原稿本文展開行（クリック時にオンデマンド取得） */}
+                      {expandedContentIds.has(post.id) && loadedContents[post.id] && (
+                        <tr className="bg-amber-50/40">
+                          <td></td>
+                          <td colSpan={9} className="px-5 py-3">
+                            <div className="flex items-start gap-2">
+                              <FileText size={14} className="text-amber-500 mt-0.5 flex-shrink-0" />
+                              <div className="flex-1 min-w-0">
+                                <div className="text-xs font-medium text-amber-700 mb-1">原稿本文</div>
+                                <div className="text-xs text-gray-600 leading-relaxed whitespace-pre-wrap max-h-48 overflow-y-auto">
+                                  {loadedContents[post.id]}
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
                     </React.Fragment>
                     );
                   })}
