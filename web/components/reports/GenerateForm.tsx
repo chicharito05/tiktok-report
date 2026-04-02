@@ -1,7 +1,6 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
 import {
   Loader2,
   CheckCircle,
@@ -12,73 +11,113 @@ import {
   Sparkles,
   FileOutput,
   ArrowRight,
-  PenLine,
+  Download,
+  RefreshCw,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import type { Client } from "@/lib/types";
 import { getDefaultDateRange } from "@/lib/utils";
+import { useToast } from "@/components/ui/Toast";
 
 interface GenerateFormProps {
   clients: Client[];
   initialClient?: string;
 }
 
-type Step =
-  | "idle"
-  | "fetching"
-  | "charts"
-  | "ai"
-  | "rendering"
-  | "done"
-  | "error";
+type Phase = "input" | "generating" | "review" | "exporting" | "done";
 
-const steps = [
+const genSteps = [
   { key: "fetching", label: "データ取得", icon: FileText },
   { key: "charts", label: "グラフ生成", icon: BarChart3 },
   { key: "ai", label: "AI分析", icon: Sparkles },
-  { key: "rendering", label: "レポート出力", icon: FileOutput },
+  { key: "rendering", label: "レポート生成", icon: FileOutput },
 ] as const;
+
+type GenStep = (typeof genSteps)[number]["key"];
 
 export default function GenerateForm({
   clients,
   initialClient,
 }: GenerateFormProps) {
   const defaultRange = getDefaultDateRange();
+  const { showToast } = useToast();
+
+  // --- Phase ---
+  const [phase, setPhase] = useState<Phase>("input");
+  const [genStep, setGenStep] = useState<GenStep>("fetching");
+  const [errorMsg, setErrorMsg] = useState("");
+
+  // --- Input ---
   const [selectedClient, setSelectedClient] = useState(initialClient || "");
   const [startDate, setStartDate] = useState(defaultRange.startDate);
   const [endDate, setEndDate] = useState(defaultRange.endDate);
-  const [step, setStep] = useState<Step>("idle");
-  const [errorMsg, setErrorMsg] = useState("");
-  const [reportId, setReportId] = useState<string | null>(null);
-  const router = useRouter();
 
-  // 総評・改善案の入力
+  // --- Generated report data ---
+  const [reportId, setReportId] = useState<string | null>(null);
+  const [htmlUrl, setHtmlUrl] = useState<string | null>(null);
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [htmlContent, setHtmlContent] = useState<string | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
+
+  // --- Editable commentary ---
   const [bestPostAnalysis, setBestPostAnalysis] = useState("");
   const [improvementSuggestions, setImprovementSuggestions] = useState("");
   const [nextMonthPlan, setNextMonthPlan] = useState("");
-  const [useAi, setUseAi] = useState(true); // AI自動生成を使うか
 
+  // Load HTML content and extract commentary when htmlUrl changes
+  useEffect(() => {
+    if (!htmlUrl) return;
+    fetch(htmlUrl)
+      .then((res) => res.text())
+      .then((text) => {
+        setHtmlContent(text);
+        extractCommentaryFromHtml(text);
+      })
+      .catch(() => setHtmlContent(null));
+  }, [htmlUrl]);
+
+  /** HTMLからAIコメンタリーテキストを抽出 */
+  const extractCommentaryFromHtml = (html: string) => {
+    try {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, "text/html");
+      const sections = doc.querySelectorAll(".commentary-text");
+      if (sections.length >= 3) {
+        setBestPostAnalysis(sections[0].textContent?.trim() || "");
+        setImprovementSuggestions(sections[1].textContent?.trim() || "");
+        setNextMonthPlan(sections[2].textContent?.trim() || "");
+      } else {
+        const pres = doc.querySelectorAll("pre");
+        const texts: string[] = [];
+        pres.forEach((pre) => {
+          const t = pre.textContent?.trim();
+          if (t && t !== "分析コメントの生成に失敗しました。") texts.push(t);
+        });
+        if (texts.length >= 1) setBestPostAnalysis(texts[0]);
+        if (texts.length >= 2) setImprovementSuggestions(texts[1]);
+        if (texts.length >= 3) setNextMonthPlan(texts[2]);
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  // ============================================================
+  // Step 1: レポート作成依頼
+  // ============================================================
   const handleGenerate = async () => {
     if (!selectedClient) return;
-    setStep("fetching");
+    setPhase("generating");
+    setGenStep("fetching");
     setErrorMsg("");
     setReportId(null);
 
-    // ユーザー入力がある場合はそれを送る
-    const userCommentary =
-      !useAi &&
-      (bestPostAnalysis || improvementSuggestions || nextMonthPlan)
-        ? {
-            best_post_analysis: bestPostAnalysis,
-            improvement_suggestions: improvementSuggestions,
-            next_month_plan: nextMonthPlan,
-          }
-        : null;
-
     try {
-      await new Promise((r) => setTimeout(r, 500));
-      setStep("charts");
-      await new Promise((r) => setTimeout(r, 500));
-      setStep("ai");
+      await new Promise((r) => setTimeout(r, 400));
+      setGenStep("charts");
+      await new Promise((r) => setTimeout(r, 400));
+      setGenStep("ai");
 
       const res = await fetch("/api/reports/generate", {
         method: "POST",
@@ -87,11 +126,10 @@ export default function GenerateForm({
           client_slug: selectedClient,
           start_date: startDate,
           end_date: endDate,
-          user_commentary: userCommentary,
         }),
       });
 
-      setStep("rendering");
+      setGenStep("rendering");
       await new Promise((r) => setTimeout(r, 300));
 
       if (!res.ok) {
@@ -101,280 +139,390 @@ export default function GenerateForm({
 
       const data = await res.json();
       setReportId(data.report_id);
-      setStep("done");
+      if (data.html_url) setHtmlUrl(data.html_url);
+
+      // → レビューフェーズへ
+      setPhase("review");
     } catch (e) {
-      setStep("error");
+      setPhase("input");
       setErrorMsg(e instanceof Error ? e.message : "エラーが発生しました");
     }
   };
 
-  const isProcessing = !["idle", "done", "error"].includes(step);
+  // ============================================================
+  // Step 3: レポート出力（編集反映 → 最終PDF生成）
+  // ============================================================
+  const handleExport = async () => {
+    if (!reportId) return;
+    setPhase("exporting");
 
-  const getStepIndex = () => steps.findIndex((s) => s.key === step);
+    try {
+      const res = await fetch("/api/reports/regenerate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          report_id: reportId,
+          best_post_analysis: bestPostAnalysis,
+          improvement_suggestions: improvementSuggestions,
+          next_month_plan: nextMonthPlan,
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "レポート出力に失敗しました");
+      }
+
+      const data = await res.json();
+      if (data.html_url) setHtmlUrl(data.html_url);
+      if (data.pdf_url) setPdfUrl(data.pdf_url);
+
+      setPhase("done");
+      showToast("success", "レポートを出力しました");
+    } catch (e) {
+      setPhase("review");
+      showToast("error", e instanceof Error ? e.message : "出力に失敗しました");
+    }
+  };
+
+  const handleReset = () => {
+    setPhase("input");
+    setReportId(null);
+    setHtmlUrl(null);
+    setPdfUrl(null);
+    setHtmlContent(null);
+    setBestPostAnalysis("");
+    setImprovementSuggestions("");
+    setNextMonthPlan("");
+    setErrorMsg("");
+    setShowPreview(false);
+  };
+
+  // ============================================================
+  // RENDER
+  // ============================================================
+  const phaseIndex =
+    phase === "input" ? 0
+    : phase === "generating" ? 1
+    : phase === "review" ? 1
+    : 2;
+
+  const genStepIndex = genSteps.findIndex((s) => s.key === genStep);
 
   return (
-    <div className="max-w-2xl">
-      {/* ステップインジケーター */}
+    <div className="max-w-5xl">
+      {/* ===== ステップインジケーター ===== */}
       <div className="flex items-center gap-3 mb-8">
-        {["入力", "生成", "確認・編集"].map((label, i) => (
+        {["レポート作成", "チェック・編集", "レポート出力"].map((label, i) => (
           <div key={label} className="flex items-center gap-3">
             <div className="flex items-center gap-2">
               <div
-                className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
-                  step === "idle" && i === 0
+                className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${
+                  i === phaseIndex
                     ? "gradient-accent text-white"
-                    : step === "done" && i === 2
-                    ? "gradient-accent text-white"
-                    : isProcessing && i === 1
-                    ? "gradient-accent text-white"
+                    : i < phaseIndex
+                    ? "bg-emerald-100 text-emerald-600"
                     : "bg-gray-200 text-gray-400"
                 }`}
               >
-                {i + 1}
+                {i < phaseIndex ? <CheckCircle size={14} /> : i + 1}
               </div>
               <span
                 className={`text-sm font-medium ${
-                  (step === "idle" && i === 0) ||
-                  (isProcessing && i === 1) ||
-                  (step === "done" && i === 2)
-                    ? "text-gray-800"
-                    : "text-gray-400"
+                  i === phaseIndex ? "text-gray-800" : "text-gray-400"
                 }`}
               >
                 {label}
               </span>
             </div>
-            {i < 2 && (
-              <ArrowRight size={14} className="text-gray-300" />
-            )}
+            {i < 2 && <ArrowRight size={14} className="text-gray-300" />}
           </div>
         ))}
       </div>
 
-      {/* フォーム */}
-      <div className="bg-white rounded-xl border border-gray-200/80 p-6 space-y-5">
-        {/* クライアント・日付 */}
-        <div>
-          <label className="block text-xs font-medium text-gray-500 mb-1.5">
-            クライアント
-          </label>
-          <div className="relative">
-            <select
-              value={selectedClient}
-              onChange={(e) => setSelectedClient(e.target.value)}
-              disabled={isProcessing || step === "done"}
-              className="w-full appearance-none px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent disabled:bg-gray-50 disabled:text-gray-400 pr-8"
-            >
-              <option value="">選択してください</option>
-              {clients.map((c) => (
-                <option key={c.id} value={c.name}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-            <ChevronDown
-              size={14}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
-            />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1.5">
-              開始日
-            </label>
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              disabled={isProcessing || step === "done"}
-              className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent disabled:bg-gray-50 disabled:text-gray-400"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1.5">
-              終了日
-            </label>
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              disabled={isProcessing || step === "done"}
-              className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent disabled:bg-gray-50 disabled:text-gray-400"
-            />
-          </div>
-        </div>
-
-        {/* 総評・改善案セクション */}
-        <div className="border-t border-gray-100 pt-5">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <PenLine size={15} className="text-gray-500" />
-              <span className="text-sm font-medium text-gray-700">
-                総評・改善案
-              </span>
+      {/* ===== Phase: INPUT ===== */}
+      {phase === "input" && (
+        <div className="bg-white rounded-xl border border-gray-200/80 p-6 space-y-5">
+          {errorMsg && (
+            <div className="flex items-start gap-3 bg-red-50 p-4 rounded-lg">
+              <AlertCircle size={18} className="text-red-500 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm text-red-600">{errorMsg}</p>
+              </div>
             </div>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={useAi}
-                onChange={(e) => setUseAi(e.target.checked)}
-                disabled={isProcessing || step === "done"}
-                className="rounded border-gray-300 text-accent focus:ring-accent/50"
-              />
-              <span className="text-xs text-gray-500">
-                AIで自動生成する
-              </span>
+          )}
+
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1.5">
+              クライアント
             </label>
+            <div className="relative">
+              <select
+                value={selectedClient}
+                onChange={(e) => setSelectedClient(e.target.value)}
+                className="w-full appearance-none px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent pr-8"
+              >
+                <option value="">選択してください</option>
+                {clients.map((c) => (
+                  <option key={c.id} value={c.name}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown
+                size={14}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+              />
+            </div>
           </div>
 
-          {!useAi && (
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs text-gray-400 mb-1">
-                  総評（ベスト投稿の分析など）
-                </label>
-                <textarea
-                  value={bestPostAnalysis}
-                  onChange={(e) => setBestPostAnalysis(e.target.value)}
-                  disabled={isProcessing || step === "done"}
-                  rows={3}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent disabled:bg-gray-50 resize-none"
-                  placeholder="例: 今月最も再生されたのは〇〇の動画で..."
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-gray-400 mb-1">
-                  改善提案
-                </label>
-                <textarea
-                  value={improvementSuggestions}
-                  onChange={(e) => setImprovementSuggestions(e.target.value)}
-                  disabled={isProcessing || step === "done"}
-                  rows={3}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent disabled:bg-gray-50 resize-none"
-                  placeholder="例: 投稿頻度を上げることで..."
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-gray-400 mb-1">
-                  来月のアクションプラン
-                </label>
-                <textarea
-                  value={nextMonthPlan}
-                  onChange={(e) => setNextMonthPlan(e.target.value)}
-                  disabled={isProcessing || step === "done"}
-                  rows={3}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent disabled:bg-gray-50 resize-none"
-                  placeholder="例: 1. 週3回以上の投稿を維持..."
-                />
-              </div>
-              <p className="text-[11px] text-gray-400">
-                ※ 空欄の項目はAIが自動生成します。生成後にプレビュー画面で修正も可能です。
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1.5">
+                開始日
+              </label>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1.5">
+                終了日
+              </label>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
+              />
+            </div>
+          </div>
+
+          <button
+            onClick={handleGenerate}
+            disabled={!selectedClient}
+            className="w-full gradient-accent text-white py-3 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            <Sparkles size={16} />
+            レポートを作成
+          </button>
+
+          <p className="text-[11px] text-gray-400 text-center">
+            AIがデータを分析してレポートを自動生成します。次のステップで内容を確認・編集できます。
+          </p>
+        </div>
+      )}
+
+      {/* ===== Phase: GENERATING ===== */}
+      {phase === "generating" && (
+        <div className="bg-white rounded-xl border border-gray-200/80 p-8">
+          <div className="flex items-center gap-3 mb-6">
+            {genSteps.map((s, i) => {
+              const isComplete = i < genStepIndex;
+              const isCurrent = i === genStepIndex;
+              const Icon = s.icon;
+              return (
+                <div key={s.key} className="flex items-center gap-3 flex-1">
+                  <div
+                    className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 transition-colors ${
+                      isComplete
+                        ? "bg-emerald-100 text-emerald-600"
+                        : isCurrent
+                        ? "bg-accent/10 text-accent progress-pulse"
+                        : "bg-gray-100 text-gray-300"
+                    }`}
+                  >
+                    {isComplete ? <CheckCircle size={18} /> : <Icon size={18} />}
+                  </div>
+                  {i < genSteps.length - 1 && (
+                    <div
+                      className={`flex-1 h-0.5 rounded ${
+                        isComplete ? "bg-emerald-200" : "bg-gray-100"
+                      }`}
+                    />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <p className="text-sm text-gray-600 text-center">
+            {genSteps[genStepIndex]?.label || "処理中"}...
+          </p>
+          <p className="text-xs text-gray-400 text-center mt-2">
+            {selectedClient} / {startDate}〜{endDate}
+          </p>
+        </div>
+      )}
+
+      {/* ===== Phase: REVIEW (チェック・編集) ===== */}
+      {phase === "review" && (
+        <div className="space-y-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-gray-800">
+                レポート内容の確認・編集
+              </h2>
+              <p className="text-xs text-gray-400 mt-0.5">
+                AIが生成した内容を確認し、必要に応じて書き換えてください。編集後「レポート出力」で最終PDFが生成されます。
               </p>
             </div>
-          )}
+            <button
+              onClick={() => setShowPreview(!showPreview)}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              {showPreview ? <EyeOff size={14} /> : <Eye size={14} />}
+              {showPreview ? "プレビューを閉じる" : "プレビュー表示"}
+            </button>
+          </div>
 
-          {useAi && (
-            <p className="text-xs text-gray-400 bg-gray-50 p-3 rounded-lg">
-              AIがデータを分析して総評・改善案を自動生成します。生成後にプレビュー画面で内容を確認・修正できます。
-            </p>
-          )}
-        </div>
+          <div className={`flex gap-5 ${showPreview ? "" : ""}`}>
+            {/* 編集パネル */}
+            <div className={`${showPreview ? "w-1/2" : "w-full"} space-y-4`}>
+              <div className="bg-white rounded-xl border border-gray-200/80 p-5 space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-2">
+                    📊 総評（ベスト投稿の分析・全体の所感）
+                  </label>
+                  <textarea
+                    value={bestPostAnalysis}
+                    onChange={(e) => setBestPostAnalysis(e.target.value)}
+                    rows={8}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-lg text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent resize-y"
+                    placeholder="AIが生成した内容がここに表示されます..."
+                  />
+                </div>
 
-        {/* 生成ボタン */}
-        <button
-          onClick={handleGenerate}
-          disabled={!selectedClient || isProcessing || step === "done"}
-          className="w-full gradient-accent text-white py-3 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-        >
-          {isProcessing && <Loader2 size={16} className="animate-spin" />}
-          {isProcessing ? "生成中..." : "レポートを生成"}
-        </button>
-      </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-2">
+                    💡 改善提案
+                  </label>
+                  <textarea
+                    value={improvementSuggestions}
+                    onChange={(e) => setImprovementSuggestions(e.target.value)}
+                    rows={8}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-lg text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent resize-y"
+                    placeholder="AIが生成した内容がここに表示されます..."
+                  />
+                </div>
 
-      {/* プログレス / 結果 */}
-      {step !== "idle" && (
-        <div className="mt-5 bg-white rounded-xl border border-gray-200/80 p-6">
-          {step === "error" ? (
-            <div className="flex items-start gap-3">
-              <div className="w-10 h-10 bg-red-50 rounded-xl flex items-center justify-center shrink-0">
-                <AlertCircle size={20} className="text-red-500" />
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-2">
+                    🎯 来月のアクションプラン
+                  </label>
+                  <textarea
+                    value={nextMonthPlan}
+                    onChange={(e) => setNextMonthPlan(e.target.value)}
+                    rows={8}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-lg text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent resize-y"
+                    placeholder="AIが生成した内容がここに表示されます..."
+                  />
+                </div>
               </div>
-              <div>
-                <p className="text-sm font-medium text-red-600">
-                  エラーが発生しました
-                </p>
-                <p className="text-xs text-red-400 mt-1">{errorMsg}</p>
+
+              {/* アクション */}
+              <div className="flex items-center gap-3">
                 <button
-                  onClick={() => setStep("idle")}
-                  className="text-xs text-gray-500 hover:text-accent mt-2"
+                  onClick={handleExport}
+                  className="flex-1 gradient-accent text-white py-3 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
                 >
-                  もう一度試す
+                  <FileOutput size={16} />
+                  レポート出力
+                </button>
+                <button
+                  onClick={handleReset}
+                  className="px-4 py-3 border border-gray-200 text-gray-500 rounded-lg text-sm hover:bg-gray-50 transition-colors"
+                >
+                  やり直す
                 </button>
               </div>
             </div>
-          ) : step === "done" ? (
-            <div className="text-center py-2">
-              <div className="w-12 h-12 bg-emerald-50 rounded-xl flex items-center justify-center mx-auto mb-3">
-                <CheckCircle size={24} className="text-emerald-500" />
-              </div>
-              <p className="text-sm font-semibold text-gray-800 mb-1">
-                レポートが生成されました
-              </p>
-              <p className="text-xs text-gray-400 mb-4">
-                プレビュー画面で内容を確認・修正し、PDFとしてダウンロードできます
-              </p>
-              <button
-                onClick={() =>
-                  router.push(
-                    reportId ? `/reports/${reportId}/preview` : "/reports"
-                  )
-                }
-                className="px-6 py-2.5 gradient-accent text-white rounded-lg text-sm font-medium hover:opacity-90 transition-opacity inline-flex items-center gap-2"
-              >
-                確認・編集画面へ
-                <ArrowRight size={15} />
-              </button>
-            </div>
-          ) : (
-            <div>
-              <div className="flex items-center gap-3 mb-5">
-                {steps.map((s, i) => {
-                  const currentIdx = getStepIndex();
-                  const isComplete = i < currentIdx;
-                  const isCurrent = i === currentIdx;
-                  const Icon = s.icon;
-                  return (
-                    <div key={s.key} className="flex items-center gap-3 flex-1">
-                      <div
-                        className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 transition-colors ${
-                          isComplete
-                            ? "bg-emerald-100 text-emerald-600"
-                            : isCurrent
-                            ? "bg-accent/10 text-accent progress-pulse"
-                            : "bg-gray-100 text-gray-300"
-                        }`}
-                      >
-                        {isComplete ? <CheckCircle size={16} /> : <Icon size={16} />}
-                      </div>
-                      {i < steps.length - 1 && (
-                        <div
-                          className={`flex-1 h-0.5 rounded ${
-                            isComplete ? "bg-emerald-200" : "bg-gray-100"
-                          }`}
-                        />
-                      )}
+
+            {/* プレビュー（トグル表示） */}
+            {showPreview && (
+              <div className="w-1/2">
+                <div className="bg-white rounded-xl border border-gray-200/80 overflow-hidden sticky top-20">
+                  {htmlContent ? (
+                    <iframe
+                      srcDoc={htmlContent}
+                      className="w-full border-0"
+                      style={{ height: "80vh" }}
+                      title="レポートプレビュー"
+                      sandbox="allow-same-origin allow-scripts"
+                    />
+                  ) : (
+                    <div className="flex items-center justify-center h-64 text-gray-400 text-sm">
+                      <Loader2 size={18} className="animate-spin mr-2" />
+                      プレビュー読み込み中...
                     </div>
-                  );
-                })}
+                  )}
+                </div>
               </div>
-              <p className="text-sm text-gray-600 text-center">
-                {steps[getStepIndex()]?.label || "処理中"}...
-              </p>
-            </div>
-          )}
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ===== Phase: EXPORTING ===== */}
+      {phase === "exporting" && (
+        <div className="bg-white rounded-xl border border-gray-200/80 p-8 text-center">
+          <Loader2 size={32} className="animate-spin text-accent mx-auto mb-4" />
+          <p className="text-sm font-medium text-gray-700">
+            編集内容を反映してレポートを出力中...
+          </p>
+          <p className="text-xs text-gray-400 mt-1">
+            HTML・PDFを生成しています
+          </p>
+        </div>
+      )}
+
+      {/* ===== Phase: DONE ===== */}
+      {phase === "done" && (
+        <div className="bg-white rounded-xl border border-gray-200/80 p-8 text-center">
+          <div className="w-14 h-14 bg-emerald-50 rounded-xl flex items-center justify-center mx-auto mb-4">
+            <CheckCircle size={28} className="text-emerald-500" />
+          </div>
+          <p className="text-lg font-bold text-gray-800 mb-1">
+            レポート出力完了
+          </p>
+          <p className="text-xs text-gray-400 mb-6">
+            {selectedClient} / {startDate}〜{endDate}
+          </p>
+
+          <div className="flex items-center justify-center gap-3 mb-6">
+            {pdfUrl && (
+              <a
+                href={pdfUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 px-6 py-3 gradient-accent text-white rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
+              >
+                <Download size={16} />
+                PDFダウンロード
+              </a>
+            )}
+            {htmlUrl && (
+              <a
+                href={htmlUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 px-6 py-3 border border-gray-200 text-gray-600 rounded-lg text-sm hover:bg-gray-50 transition-colors"
+              >
+                <FileText size={16} />
+                HTML表示
+              </a>
+            )}
+          </div>
+
+          <button
+            onClick={handleReset}
+            className="text-sm text-gray-400 hover:text-accent transition-colors flex items-center gap-1.5 mx-auto"
+          >
+            <RefreshCw size={14} />
+            別のレポートを作成
+          </button>
         </div>
       )}
     </div>
