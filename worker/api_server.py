@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, BackgroundTasks, HTTPException, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
 
 from worker.analyze import analyze_period, get_default_date_range
@@ -377,28 +377,12 @@ async def save_posts(
         raise HTTPException(status_code=500, detail=f"投稿保存に失敗しました: {e}")
 
 
-def _sync_notion_content_background(client_id: str, notion_db_id: str):
-    """バックグラウンドで原稿本文を取得・更新する。"""
-    from worker.notion_sync import sync_notion_to_posts
-    try:
-        logger.info("バックグラウンドで原稿本文を取得中: client_id=%s", client_id)
-        supabase = get_supabase_client()
-        result = sync_notion_to_posts(
-            supabase, client_id, notion_db_id, include_content=True,
-        )
-        logger.info(
-            "原稿本文の取得完了: %d件同期, %d件スキップ",
-            result["synced"], result["skipped"],
-        )
-    except Exception as e:
-        logger.exception("バックグラウンド原稿本文取得エラー: %s", e)
-
-
 @app.post("/sync-notion", response_model=NotionSyncResponse)
-async def sync_notion(req: NotionSyncRequest, background_tasks: BackgroundTasks):
+async def sync_notion(req: NotionSyncRequest):
     """クライアントのNotion DBから投稿データを同期する。
 
-    まずタイトル・投稿日のみ高速同期し、原稿本文はバックグラウンドで取得する。
+    タイトル・投稿日の同期と、未取得の原稿本文取得を一括で行う。
+    レート制限対応で差分取得（既に取得済みの本文はスキップ）。
     """
     from worker.notion_sync import sync_notion_to_posts
 
@@ -423,23 +407,23 @@ async def sync_notion(req: NotionSyncRequest, background_tasks: BackgroundTasks)
         )
 
     try:
-        # Step 1: タイトル・投稿日のみ高速同期（本文なし）
-        # ブロッキングI/Oなのでスレッドプールで実行
+        # タイトル・投稿日 + 未取得の原稿本文を一括同期
+        # レート制限対応 + 差分取得で効率化
         result = await asyncio.to_thread(
             sync_notion_to_posts,
-            supabase, req.client_id, notion_db_id, False,
+            supabase, req.client_id, notion_db_id, True,
         )
 
-        # Step 2: 原稿本文はバックグラウンドで取得
-        background_tasks.add_task(
-            _sync_notion_content_background, req.client_id, notion_db_id,
-        )
+        content_msg = ""
+        content_fetched = result.get("content_fetched", 0)
+        if content_fetched > 0:
+            content_msg = f", 原稿本文{content_fetched}件取得"
 
         return NotionSyncResponse(
             synced=result["synced"],
             skipped=result["skipped"],
             total=result["total"],
-            message=f"Notion同期完了: {result['synced']}件同期, {result['skipped']}件スキップ（原稿本文はバックグラウンドで取得中）",
+            message=f"Notion同期完了: {result['synced']}件同期, {result['skipped']}件スキップ{content_msg}",
         )
     except Exception as e:
         logger.exception("Notion同期エラー")

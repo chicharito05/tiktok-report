@@ -545,7 +545,7 @@ export default function PostsManager({ clients }: PostsManagerProps) {
               ) : (
                 <RefreshCw size={15} />
               )}
-              Notion同期
+              {syncing ? "同期中（原稿取得含む）..." : "Notion同期"}
             </button>
           )}
           <Link

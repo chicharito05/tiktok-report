@@ -12,9 +12,11 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from typing import Optional
 
 from notion_client import Client as NotionClient
+from notion_client.errors import APIResponseError
 
 logger = logging.getLogger(__name__)
 
@@ -106,6 +108,22 @@ def _extract_block_text(block: dict) -> str:
     return ""
 
 
+def _notion_request_with_retry(func, *args, max_retries: int = 3, **kwargs):
+    """Notion APIリクエストをレート制限対応のリトライ付きで実行する。"""
+    for attempt in range(max_retries):
+        try:
+            return func(*args, **kwargs)
+        except APIResponseError as e:
+            if e.status == 429 and attempt < max_retries - 1:
+                wait_time = 2 ** (attempt + 1)  # 2, 4, 8秒
+                logger.info("レート制限: %d秒待機後にリトライ (%d/%d)", wait_time, attempt + 1, max_retries)
+                time.sleep(wait_time)
+                continue
+            raise
+        except Exception:
+            raise
+
+
 def fetch_page_content(page_id: str) -> str:
     """Notionページの本文テキストを取得する。
 
@@ -129,7 +147,11 @@ def fetch_page_content(page_id: str) -> str:
             kwargs["start_cursor"] = start_cursor
 
         try:
-            response = notion.blocks.children.list(**kwargs)
+            # レート制限対応: リクエスト間に0.35秒待機（約3req/s）
+            time.sleep(0.35)
+            response = _notion_request_with_retry(
+                notion.blocks.children.list, **kwargs
+            )
         except Exception as e:
             logger.warning("ページ本文の取得に失敗: %s - %s", page_id, e)
             return ""
@@ -182,7 +204,10 @@ def fetch_notion_entries(database_id: str, include_content: bool = False) -> lis
             kwargs["start_cursor"] = start_cursor
 
         try:
-            response = notion.data_sources.query(**kwargs)
+            time.sleep(0.35)  # レート制限対策
+            response = _notion_request_with_retry(
+                notion.data_sources.query, **kwargs
+            )
         except Exception as e:
             # data_source_idではなくdatabase_idが渡された場合、
             # databases.retrieveでdata_source_idを取得して再試行
@@ -194,7 +219,10 @@ def fetch_notion_entries(database_id: str, include_content: bool = False) -> lis
                     if ds_list:
                         data_source_id = ds_list[0]["id"]
                         kwargs["data_source_id"] = data_source_id
-                        response = notion.data_sources.query(**kwargs)
+                        time.sleep(0.35)
+                        response = _notion_request_with_retry(
+                            notion.data_sources.query, **kwargs
+                        )
                     else:
                         raise RuntimeError(f"Database {database_id} にdata_sourceが見つかりません")
                 except Exception as e2:
@@ -243,7 +271,8 @@ def sync_notion_to_posts(
     """NotionのDBからpostsテーブルに同期する。
 
     タイトル・投稿日・原稿本文を同期。数値フィールド（views, likes等）は
-    上書きしない。
+    上書きしない。include_content=True の場合、DBに既にnotion_contentが
+    ある投稿はスキップし、未取得の投稿のみNotionから本文を取得する。
 
     Args:
         supabase: Supabaseクライアント
@@ -252,11 +281,35 @@ def sync_notion_to_posts(
         include_content: 原稿本文も取得・同期するか
 
     Returns:
-        {"synced": int, "skipped": int, "total": int}
+        {"synced": int, "skipped": int, "total": int, "content_fetched": int}
     """
-    entries = fetch_notion_entries(database_id, include_content=include_content)
+    # まずタイトル・投稿日のみ取得（高速）
+    entries = fetch_notion_entries(database_id, include_content=False)
+
+    # 既にnotion_contentがある投稿のcaptionセットを取得（差分取得用）
+    existing_content_captions: set[str] = set()
+    if include_content:
+        try:
+            existing = (
+                supabase.table("posts")
+                .select("caption")
+                .eq("client_id", client_id)
+                .not_.is_("notion_content", "null")
+                .neq("notion_content", "")
+                .execute()
+            )
+            existing_content_captions = {
+                r["caption"] for r in (existing.data or [])
+            }
+            logger.info(
+                "既にnotion_content取得済み: %d件",
+                len(existing_content_captions),
+            )
+        except Exception as e:
+            logger.warning("既存notion_content確認失敗: %s", e)
 
     skipped = 0
+    content_fetched = 0
     records = []
 
     for entry in entries:
@@ -278,10 +331,15 @@ def sync_notion_to_posts(
             "caption": title,
         }
 
-        # 原稿本文がある場合のみnotion_contentを含める
-        content = entry.get("content", "")
-        if content:
-            record["notion_content"] = content
+        # 原稿本文取得（差分のみ）
+        if include_content and title not in existing_content_captions:
+            page_id = entry.get("notion_page_id")
+            if page_id:
+                content = fetch_page_content(page_id)
+                if content:
+                    record["notion_content"] = content
+                    content_fetched += 1
+                    logger.debug("本文取得: %s (%d文字)", title[:30], len(content))
 
         records.append(record)
 
@@ -300,10 +358,15 @@ def sync_notion_to_posts(
             logger.warning("バッチ同期失敗 (件数=%d): %s", len(batch), e)
             skipped += len(batch)
 
-    result = {"synced": synced, "skipped": skipped, "total": len(entries)}
+    result = {
+        "synced": synced,
+        "skipped": skipped,
+        "total": len(entries),
+        "content_fetched": content_fetched,
+    }
     logger.info(
-        "Notion同期完了: %d件同期, %d件スキップ (全%d件)",
-        synced, skipped, len(entries),
+        "Notion同期完了: %d件同期, %d件スキップ, 本文%d件取得 (全%d件)",
+        synced, skipped, content_fetched, len(entries),
     )
     return result
 

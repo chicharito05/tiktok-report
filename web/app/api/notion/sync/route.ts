@@ -7,7 +7,8 @@ export async function POST(request: NextRequest) {
     const workerUrl = getWorkerApiUrl();
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 55000);
+    // 原稿本文取得はレート制限対応で時間がかかるため、5分のタイムアウト
+    const timeout = setTimeout(() => controller.abort(), 300000);
 
     const res = await fetch(`${workerUrl}/sync-notion`, {
       method: "POST",
