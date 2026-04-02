@@ -7,9 +7,10 @@ export async function POST(request: NextRequest) {
     const workerUrl = getWorkerApiUrl();
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 55000);
+    // 原稿本文取得はレート制限対応で時間がかかるため、10分のタイムアウト
+    const timeout = setTimeout(() => controller.abort(), 600000);
 
-    const res = await fetch(`${workerUrl}/sync-notion`, {
+    const res = await fetch(`${workerUrl}/fetch-notion-content`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -22,7 +23,7 @@ export async function POST(request: NextRequest) {
 
     if (!res.ok) {
       return NextResponse.json(
-        { error: data.detail || "Notion同期に失敗しました" },
+        { error: data.detail || "原稿本文の取得に失敗しました" },
         { status: res.status }
       );
     }
@@ -31,7 +32,8 @@ export async function POST(request: NextRequest) {
   } catch (e) {
     return NextResponse.json(
       {
-        error: e instanceof Error ? e.message : "Notion同期に失敗しました",
+        error:
+          e instanceof Error ? e.message : "原稿本文の取得に失敗しました",
       },
       { status: 500 }
     );

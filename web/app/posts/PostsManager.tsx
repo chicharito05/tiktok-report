@@ -87,6 +87,7 @@ export default function PostsManager({ clients }: PostsManagerProps) {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [fetchingContent, setFetchingContent] = useState(false);
   const [editedCells, setEditedCells] = useState<Record<string, Record<string, unknown>>>({});
   const [saving, setSaving] = useState<string | null>(null);
   const [savingAll, setSavingAll] = useState(false);
@@ -200,6 +201,36 @@ export default function PostsManager({ clients }: PostsManagerProps) {
       showToast("error", e instanceof Error ? e.message : "同期に失敗しました");
     } finally {
       setSyncing(false);
+    }
+  };
+
+  // --- 原稿本文取得 ---
+  const handleFetchContent = async () => {
+    if (!selectedClient?.notion_database_id) {
+      showToast("error", "Notion DB IDが未設定です");
+      return;
+    }
+    const unfetchedCount = posts.filter((p) => !p.notion_content).length;
+    if (unfetchedCount === 0) {
+      showToast("success", "全ての原稿本文は取得済みです");
+      return;
+    }
+    setFetchingContent(true);
+    showToast("success", `原稿本文を取得中... (未取得: ${unfetchedCount}件、数分かかる場合があります)`);
+    try {
+      const res = await fetch("/api/notion/fetch-content", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ client_id: selectedClient.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || data.detail);
+      showToast("success", data.message || "原稿本文を取得しました");
+      await fetchPosts();
+    } catch (e) {
+      showToast("error", e instanceof Error ? e.message : "原稿取得に失敗しました");
+    } finally {
+      setFetchingContent(false);
     }
   };
 
@@ -545,7 +576,21 @@ export default function PostsManager({ clients }: PostsManagerProps) {
               ) : (
                 <RefreshCw size={15} />
               )}
-              {syncing ? "同期中（原稿取得含む）..." : "Notion同期"}
+              {syncing ? "同期中..." : "Notion同期"}
+            </button>
+          )}
+          {selectedClient?.notion_database_id && posts.length > 0 && (
+            <button
+              onClick={handleFetchContent}
+              disabled={fetchingContent || syncing}
+              className="px-4 py-2.5 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-2 transition-colors"
+            >
+              {fetchingContent ? (
+                <Loader2 size={15} className="animate-spin" />
+              ) : (
+                <FileText size={15} />
+              )}
+              {fetchingContent ? "原稿取得中..." : "原稿取得"}
             </button>
           )}
           <Link

@@ -381,8 +381,8 @@ async def save_posts(
 async def sync_notion(req: NotionSyncRequest):
     """クライアントのNotion DBから投稿データを同期する。
 
-    タイトル・投稿日の同期と、未取得の原稿本文取得を一括で行う。
-    レート制限対応で差分取得（既に取得済みの本文はスキップ）。
+    タイトル・投稿日のみ高速同期する。
+    原稿本文は別エンドポイント /fetch-notion-content で取得する。
     """
     from worker.notion_sync import sync_notion_to_posts
 
@@ -407,27 +407,67 @@ async def sync_notion(req: NotionSyncRequest):
         )
 
     try:
-        # タイトル・投稿日 + 未取得の原稿本文を一括同期
-        # レート制限対応 + 差分取得で効率化
+        # タイトル・投稿日のみ高速同期（本文なし）
         result = await asyncio.to_thread(
             sync_notion_to_posts,
-            supabase, req.client_id, notion_db_id, True,
+            supabase, req.client_id, notion_db_id, False,
         )
-
-        content_msg = ""
-        content_fetched = result.get("content_fetched", 0)
-        if content_fetched > 0:
-            content_msg = f", 原稿本文{content_fetched}件取得"
 
         return NotionSyncResponse(
             synced=result["synced"],
             skipped=result["skipped"],
             total=result["total"],
-            message=f"Notion同期完了: {result['synced']}件同期, {result['skipped']}件スキップ{content_msg}",
+            message=f"Notion同期完了: {result['synced']}件同期, {result['skipped']}件スキップ",
         )
     except Exception as e:
         logger.exception("Notion同期エラー")
         raise HTTPException(status_code=500, detail=f"Notion同期に失敗しました: {e}")
+
+
+@app.post("/fetch-notion-content")
+async def fetch_notion_content(req: NotionSyncRequest):
+    """未取得の原稿本文をNotionから取得してDBに保存する。
+
+    レート制限対応（0.35秒/リクエスト）+ 差分取得（取得済みスキップ）。
+    時間がかかるため、フロントエンドは長めのタイムアウトを設定すること。
+    """
+    from worker.notion_sync import sync_notion_to_posts
+
+    supabase = get_supabase_client()
+
+    client_result = (
+        supabase.table("clients")
+        .select("notion_database_id")
+        .eq("id", req.client_id)
+        .single()
+        .execute()
+    )
+    if not client_result.data:
+        raise HTTPException(status_code=404, detail="クライアントが見つかりません")
+
+    notion_db_id = client_result.data.get("notion_database_id")
+    if not notion_db_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Notion DB IDが設定されていません。",
+        )
+
+    try:
+        result = await asyncio.to_thread(
+            sync_notion_to_posts,
+            supabase, req.client_id, notion_db_id, True,
+        )
+
+        content_fetched = result.get("content_fetched", 0)
+        return {
+            "synced": result["synced"],
+            "content_fetched": content_fetched,
+            "total": result["total"],
+            "message": f"原稿本文 {content_fetched}件取得完了",
+        }
+    except Exception as e:
+        logger.exception("原稿本文取得エラー")
+        raise HTTPException(status_code=500, detail=f"原稿本文取得に失敗しました: {e}")
 
 
 @app.get("/notion-articles")
