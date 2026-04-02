@@ -39,3 +39,4 @@ supabase/.temp/
 
 # Claude
 .claude/
+web/.env.vercel
