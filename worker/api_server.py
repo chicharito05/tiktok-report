@@ -424,8 +424,10 @@ async def sync_notion(req: NotionSyncRequest, background_tasks: BackgroundTasks)
 
     try:
         # Step 1: タイトル・投稿日のみ高速同期（本文なし）
-        result = sync_notion_to_posts(
-            supabase, req.client_id, notion_db_id, include_content=False,
+        # ブロッキングI/Oなのでスレッドプールで実行
+        result = await asyncio.to_thread(
+            sync_notion_to_posts,
+            supabase, req.client_id, notion_db_id, False,
         )
 
         # Step 2: 原稿本文はバックグラウンドで取得
