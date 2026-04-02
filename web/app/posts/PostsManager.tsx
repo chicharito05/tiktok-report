@@ -925,9 +925,28 @@ export default function PostsManager({ clients }: PostsManagerProps) {
                             className="w-4 h-4 accent-accent rounded"
                           />
                         </td>
-                        {/* タイトル（編集可能）+ 原稿本文アイコン */}
+                        {/* タイトル（編集可能）+ 原稿取得済みバッジ */}
                         <td className="px-4 py-2">
                           <div className="flex items-center gap-1.5">
+                            {post.notion_content ? (
+                              <button
+                                onClick={() => toggleContentExpand(post.id)}
+                                className={`flex-shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors cursor-pointer ${
+                                  expandedContentIds.has(post.id)
+                                    ? "bg-emerald-100 text-emerald-700"
+                                    : "bg-emerald-50 text-emerald-600 hover:bg-emerald-100"
+                                }`}
+                                title="原稿本文を表示/非表示"
+                              >
+                                <FileText size={11} />
+                                原稿
+                              </button>
+                            ) : (
+                              <span className="flex-shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-50 text-gray-300">
+                                <FileText size={11} />
+                                未取得
+                              </span>
+                            )}
                             <input
                               type="text"
                               defaultValue={post.caption}
@@ -937,19 +956,6 @@ export default function PostsManager({ clients }: PostsManagerProps) {
                               className="flex-1 px-3 py-2 text-sm font-medium text-gray-800 border border-gray-200 rounded-lg cell-input bg-transparent hover:border-gray-300"
                               placeholder="タイトルを入力"
                             />
-                            {post.notion_content && (
-                              <button
-                                onClick={() => toggleContentExpand(post.id)}
-                                className={`p-1.5 rounded-lg transition-colors flex-shrink-0 ${
-                                  expandedContentIds.has(post.id)
-                                    ? "text-accent bg-accent/10"
-                                    : "text-gray-400 hover:text-accent hover:bg-accent/5"
-                                }`}
-                                title="原稿本文を表示"
-                              >
-                                <FileText size={14} />
-                              </button>
-                            )}
                           </div>
                         </td>
                         {/* 投稿日（編集可能） */}
