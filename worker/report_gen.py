@@ -99,6 +99,7 @@ def _enrich_posts(posts: list[dict]) -> list[SimpleNamespace]:
             engagement_rate=engagement_rate,
             watch_through_rate=p.get("watch_through_rate"),
             two_sec_view_rate=p.get("two_sec_view_rate"),
+            notion_content=p.get("notion_content", ""),
         ))
     return enriched
 

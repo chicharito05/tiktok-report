@@ -128,6 +128,7 @@ def analyze_period(supabase, client_id: str, start_date: str, end_date: str) -> 
             "visibility": p.get("visibility", ""),
             "watch_through_rate": p.get("watch_through_rate"),
             "two_sec_view_rate": p.get("two_sec_view_rate"),
+            "notion_content": p.get("notion_content", ""),
         }
         for p in all_posts_result.data
     ]

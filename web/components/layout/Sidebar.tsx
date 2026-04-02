@@ -7,6 +7,7 @@ import {
   FilePlus,
   Users,
   Film,
+  BookOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -16,6 +17,7 @@ interface SidebarProps {
 
 const mainItems = [
   { href: "/posts", label: "動画データ管理", icon: Film },
+  { href: "/articles", label: "原稿一覧", icon: BookOpen },
 ];
 
 const reportItems = [

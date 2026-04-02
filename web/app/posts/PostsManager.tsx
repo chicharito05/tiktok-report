@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Save,
   Loader2,
@@ -19,6 +19,7 @@ import {
   ChevronUp,
   Plus,
   Trash2,
+  FileText,
 } from "lucide-react";
 import Link from "next/link";
 import type { Client } from "@/lib/types";
@@ -37,6 +38,7 @@ interface Post {
   duration: string;
   watch_through_rate: number | null;
   two_sec_view_rate: number | null;
+  notion_content: string | null;
 }
 
 interface PostsManagerProps {
@@ -45,6 +47,8 @@ interface PostsManagerProps {
 
 type SortKey = "post_date" | "views" | "likes" | "comments" | "shares";
 type SortDir = "asc" | "desc";
+
+/** 原稿本文を展開中の投稿IDセット */
 
 function formatNum(n: number | null | undefined): string {
   if (n == null || n === 0) return "--";
@@ -95,6 +99,7 @@ export default function PostsManager({ clients }: PostsManagerProps) {
   const [sortKey, setSortKey] = useState<SortKey>("post_date");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [searchQuery, setSearchQuery] = useState("");
+  const [expandedContentIds, setExpandedContentIds] = useState<Set<string>>(new Set());
   // フォロワー数管理
   const [showFollowerPanel, setShowFollowerPanel] = useState(false);
   const [followerSnapshots, setFollowerSnapshots] = useState<{ id?: string; date: string; follower_count: number }[]>([]);
@@ -336,6 +341,15 @@ export default function PostsManager({ clients }: PostsManagerProps) {
     } else {
       setSelectedPostIds(new Set(filteredPosts.map((p) => p.id)));
     }
+  };
+
+  const toggleContentExpand = (postId: string) => {
+    setExpandedContentIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(postId)) next.delete(postId);
+      else next.add(postId);
+      return next;
+    });
   };
 
   // --- 投稿手動追加 ---
@@ -892,8 +906,8 @@ export default function PostsManager({ clients }: PostsManagerProps) {
                     const edits = editedCells[post.id] || {};
                     const rowEdited = Object.keys(edits).length > 0;
                     return (
+                      <React.Fragment key={post.id}>
                       <tr
-                        key={post.id}
                         className={`transition-colors ${
                           selectedPostIds.has(post.id)
                             ? "bg-red-50/50"
@@ -911,17 +925,32 @@ export default function PostsManager({ clients }: PostsManagerProps) {
                             className="w-4 h-4 accent-accent rounded"
                           />
                         </td>
-                        {/* タイトル（編集可能） */}
+                        {/* タイトル（編集可能）+ 原稿本文アイコン */}
                         <td className="px-4 py-2">
-                          <input
-                            type="text"
-                            defaultValue={post.caption}
-                            onChange={(e) =>
-                              handleCellChange(post.id, "caption", e.target.value)
-                            }
-                            className="w-full px-3 py-2 text-sm font-medium text-gray-800 border border-gray-200 rounded-lg cell-input bg-transparent hover:border-gray-300"
-                            placeholder="タイトルを入力"
-                          />
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              type="text"
+                              defaultValue={post.caption}
+                              onChange={(e) =>
+                                handleCellChange(post.id, "caption", e.target.value)
+                              }
+                              className="flex-1 px-3 py-2 text-sm font-medium text-gray-800 border border-gray-200 rounded-lg cell-input bg-transparent hover:border-gray-300"
+                              placeholder="タイトルを入力"
+                            />
+                            {post.notion_content && (
+                              <button
+                                onClick={() => toggleContentExpand(post.id)}
+                                className={`p-1.5 rounded-lg transition-colors flex-shrink-0 ${
+                                  expandedContentIds.has(post.id)
+                                    ? "text-accent bg-accent/10"
+                                    : "text-gray-400 hover:text-accent hover:bg-accent/5"
+                                }`}
+                                title="原稿本文を表示"
+                              >
+                                <FileText size={14} />
+                              </button>
+                            )}
+                          </div>
                         </td>
                         {/* 投稿日（編集可能） */}
                         <td className="px-3 py-2">
@@ -1011,6 +1040,24 @@ export default function PostsManager({ clients }: PostsManagerProps) {
                           </div>
                         </td>
                       </tr>
+                      {/* 原稿本文展開行 */}
+                      {expandedContentIds.has(post.id) && post.notion_content && (
+                        <tr className="bg-amber-50/40">
+                          <td></td>
+                          <td colSpan={9} className="px-5 py-3">
+                            <div className="flex items-start gap-2">
+                              <FileText size={14} className="text-amber-500 mt-0.5 flex-shrink-0" />
+                              <div>
+                                <div className="text-xs font-medium text-amber-700 mb-1">原稿本文</div>
+                                <div className="text-xs text-gray-600 leading-relaxed whitespace-pre-wrap max-h-48 overflow-y-auto">
+                                  {post.notion_content}
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
                     );
                   })}
                 </tbody>

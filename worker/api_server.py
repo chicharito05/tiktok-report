@@ -378,7 +378,7 @@ async def save_posts(
 
 @app.post("/sync-notion", response_model=NotionSyncResponse)
 async def sync_notion(req: NotionSyncRequest):
-    """クライアントのNotion DBから投稿データを同期する。"""
+    """クライアントのNotion DBから投稿データを同期する（原稿本文含む）。"""
     from worker.notion_sync import sync_notion_to_posts
 
     supabase = get_supabase_client()
@@ -402,16 +402,53 @@ async def sync_notion(req: NotionSyncRequest):
         )
 
     try:
-        result = sync_notion_to_posts(supabase, req.client_id, notion_db_id)
+        result = sync_notion_to_posts(
+            supabase, req.client_id, notion_db_id, include_content=True,
+        )
         return NotionSyncResponse(
             synced=result["synced"],
             skipped=result["skipped"],
             total=result["total"],
-            message=f"Notion同期完了: {result['synced']}件同期, {result['skipped']}件スキップ",
+            message=f"Notion同期完了（原稿本文含む）: {result['synced']}件同期, {result['skipped']}件スキップ",
         )
     except Exception as e:
         logger.exception("Notion同期エラー")
         raise HTTPException(status_code=500, detail=f"Notion同期に失敗しました: {e}")
+
+
+@app.get("/notion-articles")
+async def get_notion_articles(
+    client_id: str,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+):
+    """クライアントの原稿一覧（本文付き）を取得する。"""
+    from worker.notion_sync import fetch_notion_articles
+
+    supabase = get_supabase_client()
+
+    # クライアントのNotion DB IDを取得
+    client_result = (
+        supabase.table("clients")
+        .select("notion_database_id")
+        .eq("id", client_id)
+        .single()
+        .execute()
+    )
+    if not client_result.data:
+        raise HTTPException(status_code=404, detail="クライアントが見つかりません")
+
+    notion_db_id = client_result.data.get("notion_database_id", "")
+
+    try:
+        articles = fetch_notion_articles(
+            supabase, client_id, notion_db_id,
+            start_date=start_date, end_date=end_date,
+        )
+        return {"articles": articles}
+    except Exception as e:
+        logger.exception("原稿一覧取得エラー")
+        raise HTTPException(status_code=500, detail=f"原稿一覧の取得に失敗しました: {e}")
 
 
 @app.post("/update-post")

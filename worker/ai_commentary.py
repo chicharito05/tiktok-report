@@ -28,6 +28,7 @@ SYSTEM_PROMPT = (
     "あなたはTikTokマーケティングの専門家です。"
     "クライアントへの月次レポートに記載する分析コメントを作成してください。"
     "プロフェッショナルだが読みやすいトーンで、具体的な数値を引用しながら書いてください。"
+    "原稿の本文が提供されている場合は、コンテンツの内容・構成・テーマも考慮して分析してください。"
 )
 
 USER_PROMPT_TEMPLATE = """\
@@ -36,14 +37,17 @@ USER_PROMPT_TEMPLATE = """\
 分析データ:
 {analysis_json}
 
+{article_section}
+
 ※ top_postsは再生数上位の投稿、worst_postsは再生数下位の投稿です。
 ※ follower_dataがある場合はフォロワー数の推移も考慮してください。
+※ 原稿本文がある場合は、コンテンツの内容・テーマ・構成がパフォーマンスに与えた影響も分析してください。
 
 以下のJSON形式で返してください。各セクションは日本語で3〜5文程度で記述してください。
 {{
-    "best_post_analysis": "ベスト投稿・ワースト投稿の要因分析（なぜバズったか/伸びなかったか、構成・ハッシュタグ・投稿時間の観点から比較）",
-    "improvement_suggestions": "改善提案（投稿時間帯、コンテンツの方向性、エンゲージメント向上策、ワースト投稿から学べる改善点）",
-    "next_month_plan": "来月の施策提案（具体的なアクションアイテム3〜5個、フォロワー増加施策も含む）"
+    "best_post_analysis": "ベスト投稿・ワースト投稿の要因分析（なぜバズったか/伸びなかったか、原稿の内容・構成・ハッシュタグ・投稿時間の観点から比較）",
+    "improvement_suggestions": "改善提案（投稿時間帯、コンテンツの方向性、原稿の改善点、エンゲージメント向上策、ワースト投稿から学べる改善点）",
+    "next_month_plan": "来月の施策提案（具体的なアクションアイテム3〜5個、コンテンツテーマの提案、フォロワー増加施策も含む）"
 }}
 
 JSONのみを返してください。"""
@@ -66,7 +70,27 @@ def generate_commentary(analysis_result: dict) -> dict:
         if k not in ("daily_data", "all_posts")
     }
     analysis_json = json.dumps(prompt_data, ensure_ascii=False, indent=2)
-    user_prompt = USER_PROMPT_TEMPLATE.format(analysis_json=analysis_json)
+
+    # 原稿本文セクションを構築
+    article_section = ""
+    all_posts = analysis_result.get("all_posts", [])
+    articles_with_content = [
+        p for p in all_posts if p.get("notion_content")
+    ]
+    if articles_with_content:
+        article_lines = ["以下は各投稿の原稿本文です:"]
+        for p in articles_with_content:
+            # 長すぎる場合は先頭1000文字に切り詰め
+            content = p["notion_content"][:1000]
+            article_lines.append(
+                f"\n【{p['caption']}】(再生数: {p.get('views', 0):,})\n{content}"
+            )
+        article_section = "\n".join(article_lines)
+
+    user_prompt = USER_PROMPT_TEMPLATE.format(
+        analysis_json=analysis_json,
+        article_section=article_section,
+    )
 
     logger.info("Claude APIでAI考察コメントを生成中...")
     message = client.messages.create(

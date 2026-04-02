@@ -27,6 +27,7 @@ export interface Post {
   comments: number;
   duration: string;
   visibility: string;
+  notion_content: string | null;
 }
 
 export interface Report {
