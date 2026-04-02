@@ -1,0 +1,16 @@
+clients:
+  - slug: inthegolf
+    name: InTheGolf
+    tiktok_username: "@inthegolf"
+  - slug: kyuden
+    name: 九州電力送配電
+    tiktok_username: "@kyuden_td"
+  - slug: kai_city
+    name: 甲斐市
+    tiktok_username: "@kai_city"
+  - slug: dr_recella
+    name: Dr.Recella
+    tiktok_username: "@dr_recella"
+  - slug: sanix
+    name: Sanix
+    tiktok_username: "@sanix"

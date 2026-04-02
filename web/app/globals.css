@@ -1,0 +1,96 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;600;700&display=swap');
+
+body {
+  min-width: 1024px;
+}
+
+/* カスタムスクロールバー */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+/* トースト通知アニメーション */
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-12px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes toast-out {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-12px) scale(0.96);
+  }
+}
+.toast-enter {
+  animation: toast-in 0.25s ease-out forwards;
+}
+.toast-exit {
+  animation: toast-out 0.2s ease-in forwards;
+}
+
+/* カードホバーエフェクト */
+.card-hover {
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+.card-hover:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  transform: translateY(-1px);
+}
+
+/* テーブルセル入力のフォーカス強調 */
+.cell-input {
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.cell-input:focus {
+  border-color: #E94560;
+  box-shadow: 0 0 0 2px rgba(233, 69, 96, 0.15);
+}
+
+/* プログレスバーアニメーション */
+@keyframes progress-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+.progress-pulse {
+  animation: progress-pulse 1.5s ease-in-out infinite;
+}
+
+/* 数字フォント */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* グラデーション背景 */
+.gradient-accent {
+  background: linear-gradient(135deg, #E94560 0%, #c23152 100%);
+}
+.gradient-blue {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+}
+.gradient-sidebar {
+  background: linear-gradient(180deg, #1A1A2E 0%, #16213E 100%);
+}

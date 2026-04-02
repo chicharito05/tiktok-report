@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ client_name }} - {{ period }} TikTok運用レポート</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700;900&display=swap');
+
+        :root {
+            --primary: #1a1a2e;
+            --accent: #e94560;
+            --sub: #0f3460;
+            --bg: #f8f9fa;
+            --white: #ffffff;
+            --border: #e2e8f0;
+            --text: #2d3748;
+            --text-light: #718096;
+            --green: #38a169;
+            --red: #e53e3e;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Noto Sans JP', sans-serif;
+            color: var(--text);
+            line-height: 1.6;
+            background: var(--white);
+        }
+
+        @page {
+            size: 960px 540px;
+            margin: 0;
+        }
+
+        .slide {
+            width: 960px;
+            height: 540px;
+            position: relative;
+            overflow: hidden;
+            page-break-after: always;
+            background: var(--bg);
+        }
+        .slide:last-child { page-break-after: auto; }
+
+        .slide-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 40px 12px;
+            border-bottom: 2px solid var(--primary);
+        }
+        .slide-header-logo {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--primary);
+        }
+        .slide-header-logo span { color: var(--accent); }
+        .slide-header-info {
+            font-size: 11px;
+            color: var(--text-light);
+        }
+        .slide-body {
+            padding: 16px 40px 20px;
+            height: calc(540px - 50px);
+            display: flex;
+            flex-direction: column;
+        }
+        .slide-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--primary);
+            margin-bottom: 14px;
+            padding-left: 10px;
+            border-left: 4px solid var(--accent);
+        }
+
+        /* ===== P1: Cover ===== */
+        .cover {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--sub) 100%);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            color: var(--white);
+        }
+        .cover-logo {
+            font-size: 28px;
+            font-weight: 900;
+            letter-spacing: 6px;
+            margin-bottom: 48px;
+        }
+        .cover-logo span { color: var(--accent); }
+        .cover-client {
+            font-size: 22px;
+            font-weight: 500;
+            margin-bottom: 6px;
+            opacity: 0.95;
+        }
+        .cover-period {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+        .cover-subtitle {
+            font-size: 14px;
+            font-weight: 300;
+            opacity: 0.7;
+            margin-bottom: 60px;
+        }
+        .cover-date {
+            font-size: 11px;
+            opacity: 0.5;
+        }
+
+        /* ===== P2: KPI Table ===== */
+        .kpi-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+        }
+        .kpi-table th {
+            background: var(--primary);
+            color: var(--white);
+            padding: 10px 12px;
+            font-weight: 500;
+            text-align: center;
+            font-size: 11px;
+        }
+        .kpi-table th:first-child {
+            text-align: left;
+            padding-left: 16px;
+            width: 200px;
+        }
+        .kpi-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--border);
+            text-align: center;
+            background: var(--white);
+            font-variant-numeric: tabular-nums;
+        }
+        .kpi-table td:first-child {
+            text-align: left;
+            padding-left: 16px;
+            font-weight: 500;
+            color: var(--sub);
+        }
+        .kpi-table tr:nth-child(even) td {
+            background: #f7fafc;
+        }
+        .kpi-table .change-up { color: var(--green); font-weight: 600; }
+        .kpi-table .change-down { color: var(--red); font-weight: 600; }
+        .kpi-table .change-neutral { color: var(--text-light); }
+
+        /* ===== P3: Video Table ===== */
+        .video-table-wrap {
+            flex: 1;
+            overflow: hidden;
+        }
+        .vtable {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 10px;
+        }
+        .vtable th {
+            background: var(--primary);
+            color: var(--white);
+            padding: 8px 6px;
+            text-align: center;
+            font-weight: 500;
+            font-size: 10px;
+        }
+        .vtable th:first-child { text-align: left; padding-left: 10px; }
+        .vtable td {
+            padding: 6px;
+            border-bottom: 1px solid var(--border);
+            text-align: center;
+            background: var(--white);
+            font-size: 10px;
+        }
+        .vtable td:first-child {
+            text-align: left;
+            padding-left: 10px;
+            max-width: 200px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .vtable tr:nth-child(even) td { background: #f7fafc; }
+        .vtable tr.top-row td { background: #fff5f5; }
+        .vtable .num { font-variant-numeric: tabular-nums; }
+
+        /* ===== P4: Top Posts ===== */
+        .top-posts-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 14px;
+            flex: 1;
+        }
+        .top-card {
+            background: var(--white);
+            border-radius: 8px;
+            padding: 16px;
+            border: 1px solid var(--border);
+            border-top: 3px solid var(--accent);
+            display: flex;
+            flex-direction: column;
+        }
+        .top-card-rank {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--accent);
+            margin-bottom: 8px;
+        }
+        .top-card-rank .badge {
+            background: var(--accent);
+            color: white;
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+        }
+        .top-card-caption {
+            font-size: 11px;
+            color: var(--text);
+            line-height: 1.5;
+            margin-bottom: 12px;
+            flex: 1;
+            overflow: hidden;
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+        }
+        .top-card-metrics {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 6px;
+        }
+        .top-card-metric {
+            text-align: center;
+            padding: 6px 4px;
+            background: var(--bg);
+            border-radius: 4px;
+        }
+        .top-card-metric-val {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--sub);
+        }
+        .top-card-metric-lbl {
+            font-size: 8px;
+            color: var(--text-light);
+        }
+        .top-card-date {
+            font-size: 9px;
+            color: var(--text-light);
+            margin-top: 8px;
+            text-align: right;
+        }
+
+        /* ===== P4b: Worst Posts ===== */
+        .worst-posts-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 14px;
+            flex: 1;
+        }
+        .worst-card {
+            background: var(--white);
+            border-radius: 8px;
+            padding: 16px;
+            border: 1px solid var(--border);
+            border-top: 3px solid #718096;
+            display: flex;
+            flex-direction: column;
+        }
+        .worst-card-rank {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            font-weight: 700;
+            color: #718096;
+            margin-bottom: 8px;
+        }
+        .worst-card-rank .badge {
+            background: #718096;
+            color: white;
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+        }
+        .worst-card-caption {
+            font-size: 11px;
+            color: var(--text);
+            line-height: 1.5;
+            margin-bottom: 12px;
+            flex: 1;
+            overflow: hidden;
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+        }
+        .worst-card-metrics {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 6px;
+        }
+        .worst-card-metric {
+            text-align: center;
+            padding: 6px 4px;
+            background: #f7fafc;
+            border-radius: 4px;
+        }
+        .worst-card-metric-val {
+            font-size: 14px;
+            font-weight: 700;
+            color: #718096;
+        }
+        .worst-card-metric-lbl {
+            font-size: 8px;
+            color: var(--text-light);
+        }
+        .worst-card-date {
+            font-size: 9px;
+            color: var(--text-light);
+            margin-top: 8px;
+            text-align: right;
+        }
+
+        /* ===== Follower Growth ===== */
+        .follower-summary {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+        .follower-stat {
+            background: var(--white);
+            border-radius: 8px;
+            padding: 16px 20px;
+            border: 1px solid var(--border);
+            text-align: center;
+        }
+        .follower-stat-label {
+            font-size: 10px;
+            color: var(--text-light);
+            margin-bottom: 4px;
+        }
+        .follower-stat-value {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--sub);
+        }
+        .follower-stat-value.up { color: var(--green); }
+        .follower-stat-value.down { color: var(--red); }
+        .follower-chart-area {
+            flex: 1;
+            background: var(--white);
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            padding: 16px 20px;
+            display: flex;
+            flex-direction: column;
+        }
+        .follower-bar-chart {
+            display: flex;
+            align-items: flex-end;
+            gap: 4px;
+            flex: 1;
+            padding-top: 8px;
+        }
+        .follower-bar-item {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+        }
+        .follower-bar {
+            width: 100%;
+            max-width: 40px;
+            background: linear-gradient(180deg, var(--accent) 0%, var(--sub) 100%);
+            border-radius: 3px 3px 0 0;
+            min-height: 4px;
+        }
+        .follower-bar-label {
+            font-size: 7px;
+            color: var(--text-light);
+            writing-mode: horizontal-tb;
+        }
+        .follower-bar-value {
+            font-size: 8px;
+            font-weight: 600;
+            color: var(--sub);
+        }
+
+        /* ===== P5: AI Commentary ===== */
+        .ai-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: 1fr 1fr;
+            gap: 12px;
+            flex: 1;
+        }
+        .ai-card {
+            background: var(--white);
+            border-radius: 8px;
+            padding: 14px 16px;
+            border: 1px solid var(--border);
+            overflow: hidden;
+        }
+        .ai-card.full-width {
+            grid-column: 1 / -1;
+        }
+        .ai-card-title {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--sub);
+            margin-bottom: 8px;
+            padding-bottom: 6px;
+            border-bottom: 2px solid var(--accent);
+        }
+        .ai-card-body {
+            font-size: 10px;
+            line-height: 1.8;
+            color: var(--text);
+            white-space: pre-wrap;
+            overflow: hidden;
+        }
+        .ai-disclaimer {
+            font-size: 8px;
+            color: var(--text-light);
+            text-align: center;
+            margin-top: 8px;
+        }
+
+        /* ===== P6: Consultation ===== */
+        .consult-box {
+            flex: 1;
+            background: var(--white);
+            border-radius: 8px;
+            padding: 20px 24px;
+            border: 1px solid var(--border);
+            font-size: 11px;
+            line-height: 2;
+            color: var(--text);
+        }
+
+        .no-data {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex: 1;
+            color: var(--text-light);
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ===== P1: 表紙 ===== -->
+    <div class="slide cover">
+        <div class="cover-logo">LEAD <span>ONE</span></div>
+        <div class="cover-client">{{ client_name }}　様</div>
+        <div class="cover-period">{{ period }}</div>
+        <div class="cover-subtitle">TikTok 運用レポート</div>
+        <div class="cover-date">作成日: {{ generated_date }}</div>
+    </div>
+
+    <!-- ===== P2: 数値報告 ===== -->
+    <div class="slide">
+        <div class="slide-header">
+            <div class="slide-header-logo">LEAD <span>ONE</span></div>
+            <div class="slide-header-info">{{ client_name }} | {{ period }}</div>
+        </div>
+        <div class="slide-body">
+            <div class="slide-title">数値報告</div>
+            <table class="kpi-table">
+                <thead>
+                    <tr>
+                        <th>指標</th>
+                        <th>当月実績</th>
+                        <th>前月比</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>再生回数</td>
+                        <td>{{ "{:,}".format(total_views) }}</td>
+                        <td>{% if mom_views is defined and mom_views is not none %}<span class="{{ 'change-up' if mom_views >= 0 else 'change-down' }}">{{ "+" if mom_views >= 0 else "" }}{{ "%.1f"|format(mom_views) }}%</span>{% else %}<span class="change-neutral">—</span>{% endif %}</td>
+                    </tr>
+                    <tr>
+                        <td>いいね数</td>
+                        <td>{{ "{:,}".format(total_likes) }}</td>
+                        <td>{% if mom_likes is defined and mom_likes is not none %}<span class="{{ 'change-up' if mom_likes >= 0 else 'change-down' }}">{{ "+" if mom_likes >= 0 else "" }}{{ "%.1f"|format(mom_likes) }}%</span>{% else %}<span class="change-neutral">—</span>{% endif %}</td>
+                    </tr>
+                    <tr>
+                        <td>コメント数</td>
+                        <td>{{ "{:,}".format(total_comments) }}</td>
+                        <td>{% if mom_comments is defined and mom_comments is not none %}<span class="{{ 'change-up' if mom_comments >= 0 else 'change-down' }}">{{ "+" if mom_comments >= 0 else "" }}{{ "%.1f"|format(mom_comments) }}%</span>{% else %}<span class="change-neutral">—</span>{% endif %}</td>
+                    </tr>
+                    <tr>
+                        <td>シェア数</td>
+                        <td>{{ "{:,}".format(total_shares) }}</td>
+                        <td>{% if mom_shares is defined and mom_shares is not none %}<span class="{{ 'change-up' if mom_shares >= 0 else 'change-down' }}">{{ "+" if mom_shares >= 0 else "" }}{{ "%.1f"|format(mom_shares) }}%</span>{% else %}<span class="change-neutral">—</span>{% endif %}</td>
+                    </tr>
+                    <tr>
+                        <td>プロフィール表示回数</td>
+                        <td>{{ "{:,}".format(total_profile_views) }}</td>
+                        <td><span class="change-neutral">—</span></td>
+                    </tr>
+                    <tr>
+                        <td>エンゲージメント率</td>
+                        <td>{{ "%.2f"|format(engagement_rate) }}%</td>
+                        <td><span class="change-neutral">—</span></td>
+                    </tr>
+                    <tr>
+                        <td>プロフィール遷移率</td>
+                        <td>{{ "%.2f"|format(profile_transition_rate) if profile_transition_rate else "—" }}{% if profile_transition_rate %}%{% endif %}</td>
+                        <td><span class="change-neutral">—</span></td>
+                    </tr>
+                    <tr>
+                        <td>投稿数</td>
+                        <td>{{ post_count }}本</td>
+                        <td><span class="change-neutral">—</span></td>
+                    </tr>
+                    <tr>
+                        <td>平均再生数/投稿</td>
+                        <td>{{ "{:,}".format(avg_views_per_post) if avg_views_per_post else "—" }}</td>
+                        <td><span class="change-neutral">—</span></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- ===== P3: 動画毎レポート ===== -->
+    <div class="slide">
+        <div class="slide-header">
+            <div class="slide-header-logo">LEAD <span>ONE</span></div>
+            <div class="slide-header-info">{{ client_name }} | {{ period }}</div>
+        </div>
+        <div class="slide-body">
+            <div class="slide-title">動画毎レポート</div>
+            {% if posts %}
+            <div class="video-table-wrap">
+                <table class="vtable">
+                    <thead>
+                        <tr>
+                            <th style="width:24%">タイトル</th>
+                            <th style="width:9%">投稿日</th>
+                            <th style="width:11%">再生回数</th>
+                            <th style="width:9%">いいね数</th>
+                            <th style="width:9%">コメント数</th>
+                            <th style="width:9%">シェア数</th>
+                            <th style="width:11%">エンゲージメント率</th>
+                            <th style="width:9%">視聴完了率</th>
+                            <th style="width:9%">2秒視聴率</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for post in posts %}
+                        <tr{% if loop.index <= 3 %} class="top-row"{% endif %}>
+                            <td title="{{ post.caption }}">{{ post.caption[:20] }}{% if post.caption|length > 20 %}…{% endif %}</td>
+                            <td>{{ post.post_date_display }}</td>
+                            <td class="num">{{ "{:,}".format(post.views) }}</td>
+                            <td class="num">{{ "{:,}".format(post.likes) }}</td>
+                            <td class="num">{{ "{:,}".format(post.comments) }}</td>
+                            <td class="num">{{ "{:,}".format(post.shares) if post.shares is defined else "—" }}</td>
+                            <td class="num">{{ "%.2f"|format(post.engagement_rate) }}%</td>
+                            <td class="num">{{ "%.1f"|format(post.watch_through_rate) if post.watch_through_rate is defined and post.watch_through_rate else "—" }}{% if post.watch_through_rate is defined and post.watch_through_rate %}%{% endif %}</td>
+                            <td class="num">{{ "%.1f"|format(post.two_sec_view_rate) if post.two_sec_view_rate is defined and post.two_sec_view_rate else "—" }}{% if post.two_sec_view_rate is defined and post.two_sec_view_rate %}%{% endif %}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="no-data">対象期間の投稿データがありません</div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- ===== P4: トップ投稿ハイライト ===== -->
+    <div class="slide">
+        <div class="slide-header">
+            <div class="slide-header-logo">LEAD <span>ONE</span></div>
+            <div class="slide-header-info">{{ client_name }} | {{ period }}</div>
+        </div>
+        <div class="slide-body">
+            <div class="slide-title">トップ投稿ハイライト</div>
+            {% if top_posts %}
+            <div class="top-posts-grid">
+                {% for post in top_posts[:3] %}
+                <div class="top-card">
+                    <div class="top-card-rank">
+                        <span class="badge">{{ loop.index }}</span>
+                        再生数 {{ "{:,}".format(post.views) }}
+                    </div>
+                    <div class="top-card-caption">{{ post.caption }}</div>
+                    <div class="top-card-metrics">
+                        <div class="top-card-metric">
+                            <div class="top-card-metric-val">{{ "{:,}".format(post.likes) }}</div>
+                            <div class="top-card-metric-lbl">いいね</div>
+                        </div>
+                        <div class="top-card-metric">
+                            <div class="top-card-metric-val">{{ "{:,}".format(post.comments) }}</div>
+                            <div class="top-card-metric-lbl">コメント</div>
+                        </div>
+                        <div class="top-card-metric">
+                            <div class="top-card-metric-val">{{ "%.2f"|format(post.engagement_rate) }}%</div>
+                            <div class="top-card-metric-lbl">エンゲージメント</div>
+                        </div>
+                        <div class="top-card-metric">
+                            <div class="top-card-metric-val">{{ post.duration if post.duration else "—" }}</div>
+                            <div class="top-card-metric-lbl">動画長</div>
+                        </div>
+                    </div>
+                    <div class="top-card-date">{{ post.post_date_display }} 投稿</div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="no-data">対象期間の投稿データがありません</div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- ===== P4b: ワースト投稿 ===== -->
+    {% if worst_posts %}
+    <div class="slide">
+        <div class="slide-header">
+            <div class="slide-header-logo">LEAD <span>ONE</span></div>
+            <div class="slide-header-info">{{ client_name }} | {{ period }}</div>
+        </div>
+        <div class="slide-body">
+            <div class="slide-title">ワースト投稿分析</div>
+            <div class="worst-posts-grid">
+                {% for post in worst_posts[:3] %}
+                <div class="worst-card">
+                    <div class="worst-card-rank">
+                        <span class="badge">{{ loop.index }}</span>
+                        再生数 {{ "{:,}".format(post.views) }}
+                    </div>
+                    <div class="worst-card-caption">{{ post.caption }}</div>
+                    <div class="worst-card-metrics">
+                        <div class="worst-card-metric">
+                            <div class="worst-card-metric-val">{{ "{:,}".format(post.likes) }}</div>
+                            <div class="worst-card-metric-lbl">いいね</div>
+                        </div>
+                        <div class="worst-card-metric">
+                            <div class="worst-card-metric-val">{{ "{:,}".format(post.comments) }}</div>
+                            <div class="worst-card-metric-lbl">コメント</div>
+                        </div>
+                        <div class="worst-card-metric">
+                            <div class="worst-card-metric-val">{{ "%.2f"|format(post.engagement_rate) }}%</div>
+                            <div class="worst-card-metric-lbl">エンゲージメント</div>
+                        </div>
+                        <div class="worst-card-metric">
+                            <div class="worst-card-metric-val">{{ post.duration if post.duration else "—" }}</div>
+                            <div class="worst-card-metric-lbl">動画長</div>
+                        </div>
+                    </div>
+                    <div class="worst-card-date">{{ post.post_date_display }} 投稿</div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- ===== P4c: フォロワー数の推移 ===== -->
+    {% if follower_data %}
+    <div class="slide">
+        <div class="slide-header">
+            <div class="slide-header-logo">LEAD <span>ONE</span></div>
+            <div class="slide-header-info">{{ client_name }} | {{ period }}</div>
+        </div>
+        <div class="slide-body">
+            <div class="slide-title">フォロワー数の推移</div>
+            {% if follower_growth %}
+            <div class="follower-summary">
+                <div class="follower-stat">
+                    <div class="follower-stat-label">期間開始時</div>
+                    <div class="follower-stat-value">{{ "{:,}".format(follower_growth.start_count) }}</div>
+                </div>
+                <div class="follower-stat">
+                    <div class="follower-stat-label">期間終了時</div>
+                    <div class="follower-stat-value">{{ "{:,}".format(follower_growth.end_count) }}</div>
+                </div>
+                <div class="follower-stat">
+                    <div class="follower-stat-label">増減</div>
+                    <div class="follower-stat-value {{ 'up' if follower_growth.change >= 0 else 'down' }}">
+                        {{ "+" if follower_growth.change >= 0 else "" }}{{ "{:,}".format(follower_growth.change) }}
+                        {% if follower_growth.change_rate is not none %}
+                        <span style="font-size: 14px;">({{ "+" if follower_growth.change_rate >= 0 else "" }}{{ "%.1f"|format(follower_growth.change_rate) }}%)</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+            <div class="follower-chart-area">
+                <div style="font-size: 11px; font-weight: 600; color: var(--sub); margin-bottom: 8px;">日別フォロワー数</div>
+                <div class="follower-bar-chart">
+                    {% set max_count = namespace(val=0) %}
+                    {% for d in follower_data %}
+                        {% if d.follower_count > max_count.val %}
+                            {% set max_count.val = d.follower_count %}
+                        {% endif %}
+                    {% endfor %}
+                    {% for d in follower_data %}
+                    <div class="follower-bar-item">
+                        <div class="follower-bar-value">{{ "{:,}".format(d.follower_count) }}</div>
+                        <div class="follower-bar" style="height: {{ (d.follower_count / max_count.val * 200) if max_count.val > 0 else 4 }}px;"></div>
+                        <div class="follower-bar-label">{{ d.date[5:] }}</div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- ===== P5: 総評・改善案 ===== -->
+    <div class="slide">
+        <div class="slide-header">
+            <div class="slide-header-logo">LEAD <span>ONE</span></div>
+            <div class="slide-header-info">{{ client_name }} | {{ period }}</div>
+        </div>
+        <div class="slide-body">
+            <div class="slide-title">総評・改善案</div>
+            <div class="ai-grid">
+                <div class="ai-card">
+                    <div class="ai-card-title">総評</div>
+                    <div class="ai-card-body commentary-text">{{ ai_commentary.best_post_analysis }}</div>
+                </div>
+                <div class="ai-card">
+                    <div class="ai-card-title">改善提案</div>
+                    <div class="ai-card-body commentary-text">{{ ai_commentary.improvement_suggestions }}</div>
+                </div>
+                <div class="ai-card full-width">
+                    <div class="ai-card-title">来月のアクションプラン</div>
+                    <div class="ai-card-body commentary-text">{{ ai_commentary.next_month_plan }}</div>
+                </div>
+            </div>
+            <div class="ai-disclaimer">※本分析はAIによる自動生成です。参考情報としてご活用ください。</div>
+        </div>
+    </div>
+
+    <!-- ===== P6: ご相談事項 ===== -->
+    <div class="slide">
+        <div class="slide-header">
+            <div class="slide-header-logo">LEAD <span>ONE</span></div>
+            <div class="slide-header-info">{{ client_name }} | {{ period }}</div>
+        </div>
+        <div class="slide-body">
+            <div class="slide-title">ご相談事項</div>
+            <div class="consult-box">
+                {{ consultation_notes if consultation_notes is defined and consultation_notes else "" }}
+            </div>
+        </div>
+    </div>
+
+</body>
+</html>

@@ -1,0 +1,4 @@
+-- postsテーブルに新カラム追加
+ALTER TABLE posts ADD COLUMN IF NOT EXISTS shares INT DEFAULT 0;
+ALTER TABLE posts ADD COLUMN IF NOT EXISTS watch_through_rate NUMERIC(5,2);
+ALTER TABLE posts ADD COLUMN IF NOT EXISTS two_sec_view_rate NUMERIC(5,2);

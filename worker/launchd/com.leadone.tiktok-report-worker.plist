@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.leadone.tiktok-report-worker</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/env</string>
+        <string>bash</string>
+        <string>-c</string>
+        <string>cd /path/to/tiktok-report &amp;&amp; source .venv/bin/activate &amp;&amp; uvicorn worker.api_server:app --host 0.0.0.0 --port 8787</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/tmp/tiktok-report-worker.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/tiktok-report-worker-error.log</string>
+    <key>WorkingDirectory</key>
+    <string>/path/to/tiktok-report</string>
+</dict>
+</plist>
