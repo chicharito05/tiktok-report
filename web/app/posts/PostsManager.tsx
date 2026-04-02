@@ -39,6 +39,7 @@ interface Post {
   watch_through_rate: number | null;
   two_sec_view_rate: number | null;
   notion_content: string | null;
+  has_notion_content?: boolean;
 }
 
 interface PostsManagerProps {
@@ -973,19 +974,14 @@ export default function PostsManager({ clients }: PostsManagerProps) {
                         {/* タイトル（編集可能）+ 原稿取得済みバッジ */}
                         <td className="px-4 py-2">
                           <div className="flex items-center gap-1.5">
-                            {post.notion_content ? (
-                              <button
-                                onClick={() => toggleContentExpand(post.id)}
-                                className={`flex-shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors cursor-pointer ${
-                                  expandedContentIds.has(post.id)
-                                    ? "bg-emerald-100 text-emerald-700"
-                                    : "bg-emerald-50 text-emerald-600 hover:bg-emerald-100"
-                                }`}
-                                title="原稿本文を表示/非表示"
+                            {(post.has_notion_content || (post.notion_content && post.notion_content !== "(取得済み)")) ? (
+                              <span
+                                className="flex-shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-600"
+                                title="原稿本文あり"
                               >
                                 <FileText size={11} />
                                 原稿
-                              </button>
+                              </span>
                             ) : (
                               <span className="flex-shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-50 text-gray-300">
                                 <FileText size={11} />
@@ -1091,23 +1087,7 @@ export default function PostsManager({ clients }: PostsManagerProps) {
                           </div>
                         </td>
                       </tr>
-                      {/* 原稿本文展開行 */}
-                      {expandedContentIds.has(post.id) && post.notion_content && (
-                        <tr className="bg-amber-50/40">
-                          <td></td>
-                          <td colSpan={9} className="px-5 py-3">
-                            <div className="flex items-start gap-2">
-                              <FileText size={14} className="text-amber-500 mt-0.5 flex-shrink-0" />
-                              <div>
-                                <div className="text-xs font-medium text-amber-700 mb-1">原稿本文</div>
-                                <div className="text-xs text-gray-600 leading-relaxed whitespace-pre-wrap max-h-48 overflow-y-auto">
-                                  {post.notion_content}
-                                </div>
-                              </div>
-                            </div>
-                          </td>
-                        </tr>
-                      )}
+                      {/* 原稿本文展開行は一覧では非表示（パフォーマンス最適化） */}
                     </React.Fragment>
                     );
                   })}

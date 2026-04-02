@@ -7,7 +7,7 @@ export async function POST(request: NextRequest) {
     const workerUrl = getWorkerApiUrl();
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 55000);
+    const timeout = setTimeout(() => controller.abort(), 30000);
 
     const res = await fetch(`${workerUrl}/sync-notion`, {
       method: "POST",
@@ -29,11 +29,12 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(data);
   } catch (e) {
-    return NextResponse.json(
-      {
-        error: e instanceof Error ? e.message : "Notion同期に失敗しました",
-      },
-      { status: 500 }
-    );
+    const msg =
+      e instanceof DOMException && e.name === "AbortError"
+        ? "Worker APIがタイムアウトしました。Railwayの状態を確認してください。"
+        : e instanceof Error
+          ? `Worker API接続エラー: ${e.message}`
+          : "Notion同期に失敗しました";
+    return NextResponse.json({ error: msg }, { status: 502 });
   }
 }
