@@ -45,6 +45,7 @@ class GenerateReportResponse(BaseModel):
     pdf_path: Optional[str] = None
     html_url: Optional[str] = None
     message: str
+    summary: Optional[dict] = None
 
 
 class RegenerateReportRequest(BaseModel):
@@ -127,7 +128,7 @@ async def generate_report(req: GenerateReportRequest):
     logger.info("レポート生成開始: %s / %s〜%s", req.client_slug, start_date, end_date)
 
     try:
-        html_path, pdf_path = run_generate(
+        html_path, pdf_path, summary = run_generate(
             req.client_slug, start_date, end_date, upload=True,
             user_commentary=req.user_commentary,
         )
@@ -175,6 +176,7 @@ async def generate_report(req: GenerateReportRequest):
         pdf_path=str(pdf_path) if pdf_path else None,
         html_url=html_url,
         message=f"レポート生成完了: {req.client_slug} / {start_date}〜{end_date}",
+        summary=summary,
     )
 
 
@@ -215,7 +217,7 @@ async def regenerate_report(req: RegenerateReportRequest):
         except Exception:
             pass  # 削除失敗は無視
 
-        html_path, pdf_path = run_generate(
+        html_path, pdf_path, _summary = run_generate(
             client_name, start_date, end_date, upload=True,
             user_commentary=user_commentary,
         )

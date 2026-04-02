@@ -305,7 +305,50 @@ def generate_report(
         except Exception as e:
             logger.warning("reportsテーブル記録に失敗: %s", e)
 
-    return html_path, pdf_path
+    # フロントエンド向けのサマリーデータを返す
+    summary = {
+        "client_name": client_name,
+        "period": period_display,
+        "total_views": total_views,
+        "total_likes": totals["likes"],
+        "total_comments": totals["comments"],
+        "total_shares": totals["shares"],
+        "total_profile_views": total_profile_views,
+        "engagement_rate": analysis.get("engagement_rate", 0),
+        "profile_transition_rate": profile_transition_rate,
+        "post_count": post_count,
+        "avg_views_per_post": avg_views_per_post,
+        "mom_views": mom.get("video_views"),
+        "mom_likes": mom.get("likes"),
+        "mom_comments": mom.get("comments"),
+        "mom_shares": mom.get("shares"),
+        "top_posts": [
+            {
+                "caption": getattr(p, "caption", ""),
+                "post_date": getattr(p, "post_date", ""),
+                "views": getattr(p, "views", 0),
+                "likes": getattr(p, "likes", 0),
+                "comments": getattr(p, "comments", 0),
+                "shares": getattr(p, "shares", 0),
+                "engagement_rate": getattr(p, "engagement_rate", None),
+            }
+            for p in top_posts[:5]
+        ],
+        "worst_posts": [
+            {
+                "caption": getattr(p, "caption", ""),
+                "post_date": getattr(p, "post_date", ""),
+                "views": getattr(p, "views", 0),
+                "likes": getattr(p, "likes", 0),
+                "comments": getattr(p, "comments", 0),
+                "shares": getattr(p, "shares", 0),
+            }
+            for p in worst_posts[:3]
+        ],
+        "follower_growth": analysis.get("follower_growth"),
+    }
+
+    return html_path, pdf_path, summary
 
 
 def main() -> None:
@@ -354,7 +397,7 @@ def main() -> None:
     for slug in slugs:
         try:
             logger.info("=== レポート生成開始: %s / %s〜%s ===", slug, start_date, end_date)
-            html_path, pdf_path = generate_report(slug, start_date, end_date, args.upload)
+            html_path, pdf_path, _summary = generate_report(slug, start_date, end_date, args.upload)
             logger.info("=== レポート生成完了: %s ===", slug)
             logger.info("  HTML: %s", html_path)
             if pdf_path:

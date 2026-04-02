@@ -20,6 +20,27 @@ import type { Client } from "@/lib/types";
 import { getDefaultDateRange } from "@/lib/utils";
 import { useToast } from "@/components/ui/Toast";
 
+function fmtNum(n: number | null | undefined): string {
+  if (n == null) return "--";
+  if (n >= 10000) return (n / 10000).toFixed(1) + "万";
+  return n.toLocaleString("ja-JP");
+}
+
+function fmtPct(n: number | null | undefined): string {
+  if (n == null) return "--";
+  const sign = n > 0 ? "+" : "";
+  return `${sign}${n.toFixed(1)}%`;
+}
+
+function fmtDate(d: string): string {
+  if (!d) return "";
+  try {
+    return new Date(d).toLocaleDateString("ja-JP", { month: "short", day: "numeric" });
+  } catch {
+    return d;
+  }
+}
+
 interface GenerateFormProps {
   clients: Client[];
   initialClient?: string;
@@ -59,6 +80,8 @@ export default function GenerateForm({
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [htmlContent, setHtmlContent] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [summary, setSummary] = useState<any>(null);
 
   // --- Editable commentary ---
   const [bestPostAnalysis, setBestPostAnalysis] = useState("");
@@ -140,6 +163,7 @@ export default function GenerateForm({
       const data = await res.json();
       setReportId(data.report_id);
       if (data.html_url) setHtmlUrl(data.html_url);
+      if (data.summary) setSummary(data.summary);
 
       // → レビューフェーズへ
       setPhase("review");
@@ -191,6 +215,7 @@ export default function GenerateForm({
     setHtmlUrl(null);
     setPdfUrl(null);
     setHtmlContent(null);
+    setSummary(null);
     setBestPostAnalysis("");
     setImprovementSuggestions("");
     setNextMonthPlan("");
@@ -366,7 +391,7 @@ export default function GenerateForm({
                 レポート内容の確認・編集
               </h2>
               <p className="text-xs text-gray-400 mt-0.5">
-                AIが生成した内容を確認し、必要に応じて書き換えてください。編集後「レポート出力」で最終PDFが生成されます。
+                数値データを参照しながら、AIが生成した内容を確認・書き換えてください。
               </p>
             </div>
             <button
@@ -378,13 +403,144 @@ export default function GenerateForm({
             </button>
           </div>
 
-          <div className={`flex gap-5 ${showPreview ? "" : ""}`}>
+          {/* ===== データ参照パネル ===== */}
+          {summary && (
+            <div className="bg-white rounded-xl border border-gray-200/80 p-5 space-y-4">
+              {/* KPIサマリー */}
+              <div>
+                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+                  KPIサマリー
+                </h3>
+                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
+                  {[
+                    { label: "総再生数", value: fmtNum(summary.total_views), mom: summary.mom_views },
+                    { label: "いいね", value: fmtNum(summary.total_likes), mom: summary.mom_likes },
+                    { label: "コメント", value: fmtNum(summary.total_comments), mom: summary.mom_comments },
+                    { label: "シェア", value: fmtNum(summary.total_shares), mom: summary.mom_shares },
+                    { label: "投稿数", value: String(summary.post_count ?? "--") },
+                    { label: "平均再生数", value: fmtNum(summary.avg_views_per_post) },
+                  ].map((kpi) => (
+                    <div key={kpi.label} className="bg-gray-50 rounded-lg p-3">
+                      <div className="text-[10px] text-gray-400 mb-0.5">{kpi.label}</div>
+                      <div className="text-sm font-bold text-gray-800">{kpi.value}</div>
+                      {kpi.mom != null && (
+                        <div className={`text-[10px] font-medium ${kpi.mom > 0 ? "text-emerald-600" : kpi.mom < 0 ? "text-red-500" : "text-gray-400"}`}>
+                          前月比 {fmtPct(kpi.mom)}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                {(summary.engagement_rate != null || summary.profile_transition_rate != null) && (
+                  <div className="flex gap-3 mt-3">
+                    {summary.engagement_rate != null && (
+                      <div className="bg-blue-50 rounded-lg p-3 flex-1">
+                        <div className="text-[10px] text-blue-400">エンゲージメント率</div>
+                        <div className="text-sm font-bold text-blue-700">{summary.engagement_rate.toFixed(2)}%</div>
+                      </div>
+                    )}
+                    {summary.profile_transition_rate != null && (
+                      <div className="bg-purple-50 rounded-lg p-3 flex-1">
+                        <div className="text-[10px] text-purple-400">プロフィール遷移率</div>
+                        <div className="text-sm font-bold text-purple-700">{summary.profile_transition_rate.toFixed(2)}%</div>
+                      </div>
+                    )}
+                    {summary.follower_growth != null && (
+                      <div className="bg-emerald-50 rounded-lg p-3 flex-1">
+                        <div className="text-[10px] text-emerald-400">フォロワー増減</div>
+                        <div className="text-sm font-bold text-emerald-700">
+                          {summary.follower_growth > 0 ? "+" : ""}{fmtNum(summary.follower_growth)}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* TOP投稿 */}
+              {summary.top_posts?.length > 0 && (
+                <div>
+                  <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                    TOP {summary.top_posts.length} 投稿（再生数順）
+                  </h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="text-gray-400 border-b border-gray-100">
+                          <th className="text-left py-1.5 pr-3 font-medium">#</th>
+                          <th className="text-left py-1.5 pr-3 font-medium">タイトル</th>
+                          <th className="text-left py-1.5 pr-3 font-medium">投稿日</th>
+                          <th className="text-right py-1.5 pr-3 font-medium">再生数</th>
+                          <th className="text-right py-1.5 pr-3 font-medium">いいね</th>
+                          <th className="text-right py-1.5 pr-3 font-medium">コメント</th>
+                          <th className="text-right py-1.5 font-medium">シェア</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                        {summary.top_posts.map((p: any, i: number) => (
+                          <tr key={i} className="border-b border-gray-50 hover:bg-gray-50/50">
+                            <td className="py-1.5 pr-3 text-gray-400 font-medium">{i + 1}</td>
+                            <td className="py-1.5 pr-3 text-gray-700 font-medium max-w-[200px] truncate">{p.caption}</td>
+                            <td className="py-1.5 pr-3 text-gray-400 whitespace-nowrap">{fmtDate(p.post_date)}</td>
+                            <td className="py-1.5 pr-3 text-right font-bold text-gray-800 tabular-nums">{fmtNum(p.views)}</td>
+                            <td className="py-1.5 pr-3 text-right text-gray-600 tabular-nums">{fmtNum(p.likes)}</td>
+                            <td className="py-1.5 pr-3 text-right text-gray-600 tabular-nums">{fmtNum(p.comments)}</td>
+                            <td className="py-1.5 text-right text-gray-600 tabular-nums">{fmtNum(p.shares)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* WORST投稿 */}
+              {summary.worst_posts?.length > 0 && (
+                <div>
+                  <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                    WORST {summary.worst_posts.length} 投稿
+                  </h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="text-gray-400 border-b border-gray-100">
+                          <th className="text-left py-1.5 pr-3 font-medium">タイトル</th>
+                          <th className="text-left py-1.5 pr-3 font-medium">投稿日</th>
+                          <th className="text-right py-1.5 pr-3 font-medium">再生数</th>
+                          <th className="text-right py-1.5 pr-3 font-medium">いいね</th>
+                          <th className="text-right py-1.5 pr-3 font-medium">コメント</th>
+                          <th className="text-right py-1.5 font-medium">シェア</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                        {summary.worst_posts.map((p: any, i: number) => (
+                          <tr key={i} className="border-b border-gray-50 hover:bg-gray-50/50">
+                            <td className="py-1.5 pr-3 text-gray-700 font-medium max-w-[200px] truncate">{p.caption}</td>
+                            <td className="py-1.5 pr-3 text-gray-400 whitespace-nowrap">{fmtDate(p.post_date)}</td>
+                            <td className="py-1.5 pr-3 text-right font-bold text-gray-800 tabular-nums">{fmtNum(p.views)}</td>
+                            <td className="py-1.5 pr-3 text-right text-gray-600 tabular-nums">{fmtNum(p.likes)}</td>
+                            <td className="py-1.5 pr-3 text-right text-gray-600 tabular-nums">{fmtNum(p.comments)}</td>
+                            <td className="py-1.5 text-right text-gray-600 tabular-nums">{fmtNum(p.shares)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ===== 編集エリア + プレビュー ===== */}
+          <div className={`flex gap-5`}>
             {/* 編集パネル */}
             <div className={`${showPreview ? "w-1/2" : "w-full"} space-y-4`}>
               <div className="bg-white rounded-xl border border-gray-200/80 p-5 space-y-4">
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-2">
-                    📊 総評（ベスト投稿の分析・全体の所感）
+                    総評（ベスト投稿の分析・全体の所感）
                   </label>
                   <textarea
                     value={bestPostAnalysis}
@@ -397,7 +553,7 @@ export default function GenerateForm({
 
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-2">
-                    💡 改善提案
+                    改善提案
                   </label>
                   <textarea
                     value={improvementSuggestions}
@@ -410,7 +566,7 @@ export default function GenerateForm({
 
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-2">
-                    🎯 来月のアクションプラン
+                    来月のアクションプラン
                   </label>
                   <textarea
                     value={nextMonthPlan}
