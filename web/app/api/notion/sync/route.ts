@@ -6,11 +6,17 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const workerUrl = getWorkerApiUrl();
 
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30000);
+
     const res = await fetch(`${workerUrl}/sync-notion`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
+      signal: controller.signal,
     });
+
+    clearTimeout(timeout);
 
     const data = await res.json();
 
