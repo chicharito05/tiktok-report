@@ -256,8 +256,8 @@ def sync_notion_to_posts(
     """
     entries = fetch_notion_entries(database_id, include_content=include_content)
 
-    synced = 0
     skipped = 0
+    records = []
 
     for entry in entries:
         title = entry["title"]
@@ -272,7 +272,6 @@ def sync_notion_to_posts(
         if len(post_date) == 10:  # YYYY-MM-DD
             post_date = post_date + "T00:00:00+09:00"
 
-        # タイトル・投稿日・原稿本文でUPSERT（数値フィールドは含めない）
         record = {
             "client_id": client_id,
             "post_date": post_date,
@@ -284,15 +283,22 @@ def sync_notion_to_posts(
         if content:
             record["notion_content"] = content
 
+        records.append(record)
+
+    # バッチUPSERT（50件ずつ）
+    synced = 0
+    batch_size = 50
+    for i in range(0, len(records), batch_size):
+        batch = records[i:i + batch_size]
         try:
             supabase.table("posts").upsert(
-                record,
+                batch,
                 on_conflict="client_id,post_date,caption",
             ).execute()
-            synced += 1
+            synced += len(batch)
         except Exception as e:
-            logger.warning("同期失敗: %s - %s", title, e)
-            skipped += 1
+            logger.warning("バッチ同期失敗 (件数=%d): %s", len(batch), e)
+            skipped += len(batch)
 
     result = {"synced": synced, "skipped": skipped, "total": len(entries)}
     logger.info(

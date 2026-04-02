@@ -7,7 +7,7 @@ export async function POST(request: NextRequest) {
     const workerUrl = getWorkerApiUrl();
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30000);
+    const timeout = setTimeout(() => controller.abort(), 55000);
 
     const res = await fetch(`${workerUrl}/sync-notion`, {
       method: "POST",
