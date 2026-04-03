@@ -124,6 +124,7 @@ def generate_report(
     end_date: str,
     upload: bool = False,
     user_commentary: dict | None = None,
+    operation_month: str | None = None,
 ) -> tuple[Path, Path | None]:
     """指定クライアント・期間のレポートを生成する。
 
@@ -150,8 +151,8 @@ def generate_report(
     client_name = client_result.data["name"] if client_result.data else client_slug
 
     # 1. データ分析
-    logger.info("データ分析中: %s / %s〜%s", client_slug, start_date, end_date)
-    analysis = analyze_period(supabase, client_id, start_date, end_date)
+    logger.info("データ分析中: %s / %s〜%s (運用月: %s)", client_slug, start_date, end_date, operation_month or "全て")
+    analysis = analyze_period(supabase, client_id, start_date, end_date, operation_month=operation_month)
 
     # データがない場合でも投稿データがあればレポート生成を許可
     has_posts = len(analysis.get("all_posts", [])) > 0

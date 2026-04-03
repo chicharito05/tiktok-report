@@ -35,6 +35,7 @@ class GenerateReportRequest(BaseModel):
     client_slug: str
     start_date: Optional[str] = None  # YYYY-MM-DD
     end_date: Optional[str] = None    # YYYY-MM-DD
+    operation_month: Optional[str] = None  # 運用月フィルタ（例: "1ヶ月目"）
     # ユーザー入力の総評・改善案（空ならAI自動生成）
     user_commentary: Optional[dict] = None  # {best_post_analysis, improvement_suggestions, next_month_plan}
 
@@ -108,6 +109,7 @@ class UpdatePostRequest(BaseModel):
     shares: Optional[int] = None
     watch_through_rate: Optional[float] = None
     two_sec_view_rate: Optional[float] = None
+    operation_month: Optional[str] = None
 
 
 @app.get("/health")
@@ -131,6 +133,7 @@ async def generate_report(req: GenerateReportRequest):
         html_path, pdf_path, summary = run_generate(
             req.client_slug, start_date, end_date, upload=True,
             user_commentary=req.user_commentary,
+            operation_month=req.operation_month,
         )
     except RuntimeError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -532,6 +535,8 @@ async def update_post(req: UpdatePostRequest):
         update_data["watch_through_rate"] = req.watch_through_rate
     if req.two_sec_view_rate is not None:
         update_data["two_sec_view_rate"] = req.two_sec_view_rate
+    if req.operation_month is not None:
+        update_data["operation_month"] = req.operation_month
 
     if not update_data:
         return {"message": "更新するデータがありません"}

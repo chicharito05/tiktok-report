@@ -40,6 +40,7 @@ interface Post {
   two_sec_view_rate: number | null;
   notion_content: string | null;
   has_notion_content?: boolean;
+  operation_month: string | null;
 }
 
 interface PostsManagerProps {
@@ -101,6 +102,7 @@ export default function PostsManager({ clients }: PostsManagerProps) {
   const [sortKey, setSortKey] = useState<SortKey>("post_date");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [searchQuery, setSearchQuery] = useState("");
+  const [filterMonth, setFilterMonth] = useState("");
   const [expandedContentIds, setExpandedContentIds] = useState<Set<string>>(new Set());
   const [loadedContents, setLoadedContents] = useState<Record<string, string>>({});
   const [loadingContentId, setLoadingContentId] = useState<string | null>(null);
@@ -465,8 +467,21 @@ export default function PostsManager({ clients }: PostsManagerProps) {
   };
 
   // --- フィルタ + ソート ---
+  // 運用月の選択肢
+  const availableMonths = useMemo(() => {
+    const months = new Set(posts.map((p) => p.operation_month).filter(Boolean) as string[]);
+    return Array.from(months).sort((a, b) => {
+      const numA = parseInt(a.replace(/[^0-9]/g, "")) || 0;
+      const numB = parseInt(b.replace(/[^0-9]/g, "")) || 0;
+      return numA - numB;
+    });
+  }, [posts]);
+
   const filteredPosts = useMemo(() => {
     let result = [...posts];
+    if (filterMonth) {
+      result = result.filter((p) => p.operation_month === filterMonth);
+    }
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       result = result.filter((p) => p.caption.toLowerCase().includes(q));
@@ -478,16 +493,17 @@ export default function PostsManager({ clients }: PostsManagerProps) {
       return av < bv ? -1 : av > bv ? 1 : 0;
     });
     return result;
-  }, [posts, searchQuery, sortKey, sortDir]);
+  }, [posts, filterMonth, searchQuery, sortKey, sortDir]);
 
   // --- 統計 ---
   const stats = useMemo(() => {
-    if (posts.length === 0) return null;
-    const totalViews = posts.reduce((s, p) => s + (p.views || 0), 0);
-    const totalLikes = posts.reduce((s, p) => s + (p.likes || 0), 0);
-    const totalComments = posts.reduce((s, p) => s + (p.comments || 0), 0);
-    const totalShares = posts.reduce((s, p) => s + (p.shares || 0), 0);
-    const avgViews = Math.round(totalViews / posts.length);
+    const target = filterMonth ? filteredPosts : posts;
+    if (target.length === 0) return null;
+    const totalViews = target.reduce((s, p) => s + (p.views || 0), 0);
+    const totalLikes = target.reduce((s, p) => s + (p.likes || 0), 0);
+    const totalComments = target.reduce((s, p) => s + (p.comments || 0), 0);
+    const totalShares = target.reduce((s, p) => s + (p.shares || 0), 0);
+    const avgViews = Math.round(totalViews / target.length);
     const avgEngagement =
       totalViews > 0
         ? (((totalLikes + totalComments + totalShares) / totalViews) * 100).toFixed(2)
@@ -499,9 +515,9 @@ export default function PostsManager({ clients }: PostsManagerProps) {
       totalShares,
       avgViews,
       avgEngagement,
-      count: posts.length,
+      count: target.length,
     };
-  }, [posts]);
+  }, [posts, filteredPosts, filterMonth]);
 
   // ===================== クライアント未選択 =====================
   if (!selectedClientId) {
@@ -885,7 +901,7 @@ export default function PostsManager({ clients }: PostsManagerProps) {
             </div>
           )}
 
-          {/* 検索バー + 追加 + 一括保存 */}
+          {/* 検索バー + 運用月フィルタ + 追加 + 一括保存 */}
           <div className="flex items-center gap-3 mb-4">
             <div className="relative flex-1 max-w-xs">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -897,6 +913,20 @@ export default function PostsManager({ clients }: PostsManagerProps) {
                 className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
               />
             </div>
+            {availableMonths.length > 0 && (
+              <select
+                value={filterMonth}
+                onChange={(e) => setFilterMonth(e.target.value)}
+                className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent bg-white"
+              >
+                <option value="">全運用月</option>
+                {availableMonths.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+            )}
             <span className="text-xs text-gray-400">
               {filteredPosts.length}件表示 / 全{posts.length}件
             </span>
@@ -935,7 +965,7 @@ export default function PostsManager({ clients }: PostsManagerProps) {
           {/* テーブル（横スクロール対応） */}
           <div className="bg-white rounded-xl border border-gray-200/80 overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="text-sm" style={{ minWidth: "1200px", width: "100%" }}>
+              <table className="text-sm" style={{ minWidth: "1300px", width: "100%" }}>
                 <thead>
                   <tr className="bg-gray-50/80 border-b border-gray-100">
                     <th className="pl-4 pr-1 py-3 w-10">
@@ -948,6 +978,9 @@ export default function PostsManager({ clients }: PostsManagerProps) {
                     </th>
                     <th className="px-5 py-3 text-left font-medium text-gray-500 text-xs uppercase tracking-wider" style={{ minWidth: "400px" }}>
                       タイトル
+                    </th>
+                    <th className="px-3 py-3 text-center font-medium text-gray-500 text-xs uppercase tracking-wider" style={{ minWidth: "80px" }}>
+                      運用月
                     </th>
                     <th className="px-3 py-3 text-center font-medium text-gray-500 text-xs uppercase tracking-wider" style={{ minWidth: "150px" }}>
                       <SortLabel label="投稿日" sortKey="post_date" current={sortKey} dir={sortDir} onClick={toggleSort} />
@@ -1034,6 +1067,18 @@ export default function PostsManager({ clients }: PostsManagerProps) {
                               placeholder="タイトルを入力"
                             />
                           </div>
+                        </td>
+                        {/* 運用月 */}
+                        <td className="px-3 py-2">
+                          <input
+                            type="text"
+                            defaultValue={post.operation_month || ""}
+                            onChange={(e) =>
+                              handleCellChange(post.id, "operation_month", e.target.value || null)
+                            }
+                            className="w-full px-2 py-2 text-sm text-center border border-gray-200 rounded-lg cell-input bg-transparent hover:border-gray-300"
+                            placeholder="--"
+                          />
                         </td>
                         {/* 投稿日（編集可能） */}
                         <td className="px-3 py-2">
@@ -1127,7 +1172,7 @@ export default function PostsManager({ clients }: PostsManagerProps) {
                       {expandedContentIds.has(post.id) && loadedContents[post.id] && (
                         <tr className="bg-amber-50/40">
                           <td></td>
-                          <td colSpan={9} className="px-5 py-3">
+                          <td colSpan={10} className="px-5 py-3">
                             <div className="flex items-start gap-2">
                               <FileText size={14} className="text-amber-500 mt-0.5 flex-shrink-0" />
                               <div className="flex-1 min-w-0">

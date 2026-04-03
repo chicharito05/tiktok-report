@@ -74,6 +74,32 @@ def _extract_status(page: dict, prop_names: list[str]) -> Optional[str]:
     return None
 
 
+def _extract_rich_text(page: dict, prop_names: list[str]) -> Optional[str]:
+    """ページからrich_textプロパティの値を取得する。"""
+    props = page.get("properties", {})
+    for name in prop_names:
+        prop = props.get(name)
+        if not prop:
+            continue
+        if prop["type"] == "rich_text":
+            texts = prop.get("rich_text", [])
+            if texts:
+                return texts[0].get("plain_text", "").strip()
+    return None
+
+
+def _normalize_operation_month(raw: Optional[str]) -> Optional[str]:
+    """運用月の値を正規化する（全角数字→半角、表記統一）。
+
+    例: '１ヶ月目' → '1ヶ月目', '7ヶ月目' → '7ヶ月目'
+    """
+    if not raw:
+        return None
+    # 全角数字→半角
+    normalized = raw.translate(str.maketrans("０１２３４５６７８９", "0123456789"))
+    return normalized.strip()
+
+
 def _extract_block_text(block: dict) -> str:
     """1つのブロックからテキストを抽出する。"""
     block_type = block.get("type", "")
@@ -236,6 +262,8 @@ def fetch_notion_entries(database_id: str, include_content: bool = False) -> lis
             title = _extract_title(page, ["タイトル", "名前", "Name", "title"])
             post_date = _extract_date(page, ["公開予定", "投稿日", "公開日", "日付"])
             status = _extract_status(page, ["ステータス", "Status"])
+            operation_month_raw = _extract_rich_text(page, ["運用月", "運用月目"])
+            operation_month = _normalize_operation_month(operation_month_raw)
 
             if not title:
                 logger.debug("タイトルなしのエントリをスキップ: %s", page.get("id"))
@@ -245,6 +273,7 @@ def fetch_notion_entries(database_id: str, include_content: bool = False) -> lis
                 "title": title.strip(),
                 "post_date": post_date,
                 "status": status,
+                "operation_month": operation_month,
                 "notion_page_id": page.get("id"),
                 "content": "",
             }
@@ -330,6 +359,10 @@ def sync_notion_to_posts(
             "post_date": post_date,
             "caption": title,
         }
+
+        # 運用月
+        if entry.get("operation_month"):
+            record["operation_month"] = entry["operation_month"]
 
         # 原稿本文取得（差分のみ）
         if include_content and title not in existing_content_captions:

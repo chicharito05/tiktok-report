@@ -73,6 +73,8 @@ export default function GenerateForm({
   const [selectedClient, setSelectedClient] = useState(initialClient || "");
   const [startDate, setStartDate] = useState(defaultRange.startDate);
   const [endDate, setEndDate] = useState(defaultRange.endDate);
+  const [operationMonth, setOperationMonth] = useState("");
+  const [availableOperationMonths, setAvailableOperationMonths] = useState<string[]>([]);
 
   // --- Generated report data ---
   const [reportId, setReportId] = useState<string | null>(null);
@@ -87,6 +89,31 @@ export default function GenerateForm({
   const [bestPostAnalysis, setBestPostAnalysis] = useState("");
   const [improvementSuggestions, setImprovementSuggestions] = useState("");
   const [nextMonthPlan, setNextMonthPlan] = useState("");
+
+  // 選択クライアントの運用月リストを取得
+  useEffect(() => {
+    if (!selectedClient) {
+      setAvailableOperationMonths([]);
+      return;
+    }
+    const clientObj = clients.find((c) => c.name === selectedClient);
+    if (!clientObj) return;
+    fetch(`/api/posts?client_slug=${encodeURIComponent(selectedClient)}`)
+      .then((r) => r.json())
+      .then((data) => {
+        const months = new Set<string>();
+        for (const p of data.posts || []) {
+          if (p.operation_month) months.add(p.operation_month);
+        }
+        const sorted = Array.from(months).sort((a, b) => {
+          const numA = parseInt(a.replace(/[^0-9]/g, "")) || 0;
+          const numB = parseInt(b.replace(/[^0-9]/g, "")) || 0;
+          return numA - numB;
+        });
+        setAvailableOperationMonths(sorted);
+      })
+      .catch(() => setAvailableOperationMonths([]));
+  }, [selectedClient, clients]);
 
   // Load HTML content and extract commentary when htmlUrl changes
   useEffect(() => {
@@ -149,6 +176,7 @@ export default function GenerateForm({
           client_slug: selectedClient,
           start_date: startDate,
           end_date: endDate,
+          operation_month: operationMonth || undefined,
         }),
       });
 
@@ -219,6 +247,7 @@ export default function GenerateForm({
     setBestPostAnalysis("");
     setImprovementSuggestions("");
     setNextMonthPlan("");
+    setOperationMonth("");
     setErrorMsg("");
     setShowPreview(false);
   };
@@ -325,6 +354,32 @@ export default function GenerateForm({
               />
             </div>
           </div>
+
+          {availableOperationMonths.length > 0 && (
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1.5">
+                運用月で絞り込み（任意）
+              </label>
+              <div className="relative">
+                <select
+                  value={operationMonth}
+                  onChange={(e) => setOperationMonth(e.target.value)}
+                  className="w-full appearance-none px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent pr-8"
+                >
+                  <option value="">全運用月</option>
+                  {availableOperationMonths.map((m) => (
+                    <option key={m} value={m}>
+                      {m}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown
+                  size={14}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+                />
+              </div>
+            </div>
+          )}
 
           <button
             onClick={handleGenerate}

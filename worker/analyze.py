@@ -30,7 +30,13 @@ def get_default_date_range() -> tuple[str, str]:
     return last_month_start.isoformat(), last_month_end.isoformat()
 
 
-def analyze_period(supabase, client_id: str, start_date: str, end_date: str) -> dict:
+def analyze_period(
+    supabase,
+    client_id: str,
+    start_date: str,
+    end_date: str,
+    operation_month: str | None = None,
+) -> dict:
     """期間指定の分析を実行する。
 
     Args:
@@ -38,6 +44,7 @@ def analyze_period(supabase, client_id: str, start_date: str, end_date: str) -> 
         client_id: クライアントUUID
         start_date: 開始日 (YYYY-MM-DD)
         end_date: 終了日 (YYYY-MM-DD)
+        operation_month: 運用月フィルタ（例: "1ヶ月目"）。指定時は投稿をこの運用月に絞る
 
     Returns:
         分析結果の辞書
@@ -107,15 +114,16 @@ def analyze_period(supabase, client_id: str, start_date: str, end_date: str) -> 
             mom_change[key] = None
 
     # 投稿別データ（全件、再生数降順）
-    all_posts_result = (
+    posts_query = (
         supabase.table("posts")
         .select("*")
         .eq("client_id", client_id)
         .gte("post_date", start_date)
         .lte("post_date", end_date + "T23:59:59")
-        .order("views", desc=True)
-        .execute()
     )
+    if operation_month:
+        posts_query = posts_query.eq("operation_month", operation_month)
+    all_posts_result = posts_query.order("views", desc=True).execute()
     all_posts = [
         {
             "caption": p["caption"],
