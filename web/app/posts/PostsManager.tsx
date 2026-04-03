@@ -476,9 +476,7 @@ export default function PostsManager({ clients }: PostsManagerProps) {
         if (n > 0) nums.add(n);
       }
     }
-    // 既存の最大値か24のうち大きい方まで選択肢を用意
-    const maxMonth = Math.max(...Array.from(nums), 12);
-    return Array.from({ length: maxMonth }, (_, i) => i + 1);
+    return Array.from({ length: 24 }, (_, i) => i + 1);
   }, [posts]);
 
   const filteredPosts = useMemo(() => {
