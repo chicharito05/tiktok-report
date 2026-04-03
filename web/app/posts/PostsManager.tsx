@@ -467,20 +467,28 @@ export default function PostsManager({ clients }: PostsManagerProps) {
   };
 
   // --- フィルタ + ソート ---
-  // 運用月の選択肢
-  const availableMonths = useMemo(() => {
-    const months = new Set(posts.map((p) => p.operation_month).filter(Boolean) as string[]);
-    return Array.from(months).sort((a, b) => {
-      const numA = parseInt(a.replace(/[^0-9]/g, "")) || 0;
-      const numB = parseInt(b.replace(/[^0-9]/g, "")) || 0;
-      return numA - numB;
-    });
+  // 運用月の選択肢（数字のみ昇順）
+  const availableMonthNums = useMemo(() => {
+    const nums = new Set<number>();
+    for (const p of posts) {
+      if (p.operation_month) {
+        const n = parseInt(p.operation_month.replace(/[^0-9]/g, ""));
+        if (n > 0) nums.add(n);
+      }
+    }
+    // 既存の最大値か24のうち大きい方まで選択肢を用意
+    const maxMonth = Math.max(...Array.from(nums), 12);
+    return Array.from({ length: maxMonth }, (_, i) => i + 1);
   }, [posts]);
 
   const filteredPosts = useMemo(() => {
     let result = [...posts];
     if (filterMonth) {
-      result = result.filter((p) => p.operation_month === filterMonth);
+      result = result.filter((p) => {
+        if (!p.operation_month) return false;
+        const n = parseInt(p.operation_month.replace(/[^0-9]/g, ""));
+        return n === parseInt(filterMonth);
+      });
     }
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
@@ -913,16 +921,16 @@ export default function PostsManager({ clients }: PostsManagerProps) {
                 className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
               />
             </div>
-            {availableMonths.length > 0 && (
+            {availableMonthNums.length > 0 && (
               <select
                 value={filterMonth}
                 onChange={(e) => setFilterMonth(e.target.value)}
                 className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent bg-white"
               >
                 <option value="">全運用月</option>
-                {availableMonths.map((m) => (
-                  <option key={m} value={m}>
-                    {m}
+                {availableMonthNums.map((n) => (
+                  <option key={n} value={String(n)}>
+                    {n}ヶ月目
                   </option>
                 ))}
               </select>
@@ -1068,17 +1076,23 @@ export default function PostsManager({ clients }: PostsManagerProps) {
                             />
                           </div>
                         </td>
-                        {/* 運用月 */}
+                        {/* 運用月（プルダウン） */}
                         <td className="px-3 py-2">
-                          <input
-                            type="text"
-                            defaultValue={post.operation_month || ""}
-                            onChange={(e) =>
-                              handleCellChange(post.id, "operation_month", e.target.value || null)
-                            }
-                            className="w-full px-2 py-2 text-sm text-center border border-gray-200 rounded-lg cell-input bg-transparent hover:border-gray-300"
-                            placeholder="--"
-                          />
+                          <select
+                            defaultValue={post.operation_month ? String(parseInt(post.operation_month.replace(/[^0-9]/g, "")) || "") : ""}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              handleCellChange(post.id, "operation_month", v ? `${v}ヶ月目` : null);
+                            }}
+                            className="w-full px-1 py-2 text-sm text-center border border-gray-200 rounded-lg cell-input bg-transparent hover:border-gray-300 appearance-none cursor-pointer"
+                          >
+                            <option value="">--</option>
+                            {availableMonthNums.map((n) => (
+                              <option key={n} value={String(n)}>
+                                {n}
+                              </option>
+                            ))}
+                          </select>
                         </td>
                         {/* 投稿日（編集可能） */}
                         <td className="px-3 py-2">
