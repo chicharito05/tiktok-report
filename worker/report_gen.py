@@ -229,6 +229,8 @@ def generate_report(
         "day_of_week_performance": analysis.get("day_of_week_performance", []),
         "hour_performance": analysis.get("hour_performance", []),
         "engagement_composition": analysis.get("engagement_composition", {}),
+        # 月別推移データ
+        "monthly_transition": analysis.get("monthly_transition", []),
         # AI分析（総評・改善案）
         "ai_commentary": ai_commentary,
     }

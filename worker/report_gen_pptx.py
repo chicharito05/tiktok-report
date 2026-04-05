@@ -632,7 +632,117 @@ def generate_pptx(context: dict, output_path: Path) -> Path:
                       color=TEXT_SECONDARY, align=PP_ALIGN.CENTER, bg=row_bg)
 
     # ================================================================
-    # P5: 総評・パフォーマンス分析（AI）
+    # P5: 数値報告（月別推移）
+    # ================================================================
+    monthly = context.get("monthly_transition", [])
+    if monthly:
+        s_num = prs.slides.add_slide(blank)
+        _slide_bg(s_num, SURFACE)
+        _page_header(s_num, cn, period)
+        _section_title(s_num, "数値報告")
+
+        # 表示する月数（最大12ヶ月目まで）
+        months = monthly[:12]
+        n_months = len(months)
+        n_cols = n_months + 2  # カテゴリ列 + 指標列 + N月分
+
+        # 行定義: カテゴリ / 指標名
+        row_defs = [
+            ("当月", "フォロワー数"),
+            ("累計", "再生回数"),
+            ("累計", "プロフィール表示回数"),
+            ("累計", "フォロワー増加数"),
+            ("月間", "再生回数"),
+            ("月間", "フォロワー増加数"),
+            ("月間", "プロフィール表示回数"),
+            ("月間", "プロフィール遷移率"),
+        ]
+
+        n_rows = len(row_defs) + 1  # +1 for header
+        tbl_w = 11.7
+        tbl = s_num.shapes.add_table(
+            n_rows, n_cols,
+            Inches(0.8), Inches(1.5), Inches(tbl_w), Inches(5.5),
+        ).table
+
+        # 列幅設定
+        cat_w = Inches(0.9)
+        metric_w = Inches(1.5)
+        month_w = Inches((tbl_w - 0.9 - 1.5) / max(n_months, 1))
+        tbl.columns[0].width = cat_w
+        tbl.columns[1].width = metric_w
+        for ci in range(2, n_cols):
+            tbl.columns[ci].width = month_w
+
+        # ヘッダー行
+        _set_cell(tbl.cell(0, 0), "", size=9, bold=True, color=WHITE, bg=TEXT_PRIMARY)
+        _set_cell(tbl.cell(0, 1), "運用月", size=9, bold=True, color=WHITE,
+                  align=PP_ALIGN.CENTER, bg=TEXT_PRIMARY)
+        for ci, m in enumerate(months):
+            _set_cell(tbl.cell(0, ci + 2), f"{m['month_num']}ヶ月目", size=9, bold=True,
+                      color=WHITE, align=PP_ALIGN.CENTER, bg=TEXT_PRIMARY)
+
+        # カテゴリセル結合用: 同じカテゴリが連続する行を検出
+        prev_cat = None
+        cat_start = 1
+        cat_groups: list[tuple[str, int, int]] = []
+        for ri, (cat, _) in enumerate(row_defs, start=1):
+            if cat != prev_cat:
+                if prev_cat is not None:
+                    cat_groups.append((prev_cat, cat_start, ri - 1))
+                cat_start = ri
+                prev_cat = cat
+        if prev_cat is not None:
+            cat_groups.append((prev_cat, cat_start, len(row_defs)))
+
+        # カテゴリ列 + 指標列を設定
+        for cat, start_r, end_r in cat_groups:
+            # カテゴリセルに値を設定（最初の行のみ、残りは空）
+            for ri in range(start_r, end_r + 1):
+                cat_bg = RGBColor(0xF0, 0xF1, 0xF3)
+                if ri == start_r:
+                    _set_cell(tbl.cell(ri, 0), cat, size=9, bold=True,
+                              color=TEXT_PRIMARY, align=PP_ALIGN.CENTER, bg=cat_bg)
+                else:
+                    _set_cell(tbl.cell(ri, 0), "", size=9, bg=cat_bg)
+
+        # 指標名列
+        for ri, (_, metric) in enumerate(row_defs, start=1):
+            _set_cell(tbl.cell(ri, 1), metric, size=9, bold=True,
+                      color=TEXT_PRIMARY, align=PP_ALIGN.CENTER,
+                      bg=RGBColor(0xF0, 0xF1, 0xF3))
+
+        # データ列
+        cum_views = 0
+        for ci, m in enumerate(months):
+            col = ci + 2
+            mv = m.get("monthly_views", 0)
+            cum_views_val = m.get("cumulative_views", 0)
+            row_bg = SURFACE if ci % 2 == 0 else None
+
+            data_vals = [
+                "--",                          # 当月フォロワー数（要手入力）
+                _n(cum_views_val),             # 累計再生回数
+                "--",                          # 累計プロフィール表示回数
+                "--",                          # 累計フォロワー増加数
+                _n(mv),                        # 月間再生回数
+                "--",                          # 月間フォロワー増加数
+                "--",                          # 月間プロフィール表示回数
+                "--",                          # 月間プロフィール遷移率
+            ]
+
+            for ri, val in enumerate(data_vals):
+                _set_cell(tbl.cell(ri + 1, col), val, size=9,
+                          color=TEXT_PRIMARY if val != "--" else TEXT_MUTED,
+                          align=PP_ALIGN.CENTER, bg=row_bg)
+
+        # カテゴリセル結合（python-pptxでは垂直結合をサポート）
+        for cat, start_r, end_r in cat_groups:
+            if end_r > start_r:
+                tbl.cell(start_r, 0).merge(tbl.cell(end_r, 0))
+
+    # ================================================================
+    # P6: 総評・パフォーマンス分析（AI）
     # ================================================================
     _ai_text_slide(prs, blank, cn, period,
                    "総評・パフォーマンス分析",
@@ -640,7 +750,7 @@ def generate_pptx(context: dict, output_path: Path) -> Path:
                    accent=ACCENT)
 
     # ================================================================
-    # P6: 改善提案（AI）
+    # P7: 改善提案（AI）
     # ================================================================
     _ai_text_slide(prs, blank, cn, period,
                    "改善提案",
@@ -648,7 +758,7 @@ def generate_pptx(context: dict, output_path: Path) -> Path:
                    accent=WARM)
 
     # ================================================================
-    # P7: 来月のアクションプラン（AI）
+    # P8: 来月のアクションプラン（AI）
     # ================================================================
     _ai_text_slide(prs, blank, cn, period,
                    "来月のアクションプラン",

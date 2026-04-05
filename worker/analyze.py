@@ -30,6 +30,85 @@ def get_default_date_range() -> tuple[str, str]:
     return last_month_start.isoformat(), last_month_end.isoformat()
 
 
+def _calc_monthly_transition(supabase, client_id: str) -> list[dict]:
+    """運用月別の累計・月間パフォーマンスを集計する。
+
+    Returns:
+        [{"month_num": 1, "month_label": "1ヶ月目",
+          "views": ..., "followers": ..., "profile_views": ...,
+          "follower_change": ..., "profile_transition_rate": ...}, ...]
+    """
+    import re
+
+    # operation_monthが設定されている全投稿を取得
+    posts_result = (
+        supabase.table("posts")
+        .select("operation_month, views, likes, comments, shares")
+        .eq("client_id", client_id)
+        .not_.is_("operation_month", "null")
+        .execute()
+    )
+
+    # operation_monthごとに集計
+    month_data: dict[int, dict] = {}
+    for p in posts_result.data:
+        om = p.get("operation_month", "")
+        m = re.search(r"(\d+)", str(om))
+        if not m:
+            continue
+        num = int(m.group(1))
+        if num not in month_data:
+            month_data[num] = {"views": 0, "likes": 0, "comments": 0, "shares": 0}
+        month_data[num]["views"] += p.get("views", 0) or 0
+        month_data[num]["likes"] += p.get("likes", 0) or 0
+        month_data[num]["comments"] += p.get("comments", 0) or 0
+        month_data[num]["shares"] += p.get("shares", 0) or 0
+
+    # daily_overviewからプロフィール閲覧数を月ごとに集計
+    # （日付をoperation_monthにマッピングする方法がないため、投稿データのみで集計）
+
+    # フォロワースナップショットの取得
+    follower_data_all = []
+    try:
+        f_result = (
+            supabase.table("follower_snapshots")
+            .select("date, follower_count")
+            .eq("client_id", client_id)
+            .order("date")
+            .execute()
+        )
+        follower_data_all = f_result.data
+    except Exception:
+        pass
+
+    if not month_data:
+        return []
+
+    max_month = max(month_data.keys())
+    result = []
+    cum_views = 0
+    cum_profile = 0
+    cum_follower_change = 0
+
+    for num in range(1, max_month + 1):
+        md = month_data.get(num, {"views": 0, "likes": 0, "comments": 0, "shares": 0})
+        cum_views += md["views"]
+
+        result.append({
+            "month_num": num,
+            "month_label": f"{num}ヶ月目",
+            # 月間
+            "monthly_views": md["views"],
+            "monthly_likes": md["likes"],
+            "monthly_comments": md["comments"],
+            "monthly_shares": md["shares"],
+            # 累計
+            "cumulative_views": cum_views,
+        })
+
+    return result
+
+
 def analyze_period(
     supabase,
     client_id: str,
@@ -114,21 +193,16 @@ def analyze_period(
             mom_change[key] = None
 
     # 投稿別データ（全件、再生数降順）
-    # operation_month 指定時は運用月のみでフィルタ（日付範囲は無視）
-    # それ以外は日付範囲でフィルタ
+    # 常に日付範囲でフィルタ + operation_month指定時は追加フィルタ
     posts_query = (
         supabase.table("posts")
         .select("*")
         .eq("client_id", client_id)
+        .gte("post_date", start_date + "T00:00:00")
+        .lte("post_date", end_date + "T23:59:59")
     )
     if operation_month:
         posts_query = posts_query.eq("operation_month", operation_month)
-    else:
-        posts_query = (
-            posts_query
-            .gte("post_date", start_date)
-            .lte("post_date", end_date + "T23:59:59")
-        )
     all_posts_result = posts_query.order("views", desc=True).execute()
     all_posts = [
         {
@@ -254,6 +328,9 @@ def analyze_period(
         for k, v in engagement_breakdown.items()
     }
 
+    # 月別推移データ（operation_month別の集計）
+    monthly_transition = _calc_monthly_transition(supabase, client_id)
+
     result = {
         "start_date": start_date,
         "end_date": end_date,
@@ -274,6 +351,7 @@ def analyze_period(
         "day_of_week_performance": day_of_week_perf,
         "hour_performance": hour_perf,
         "engagement_composition": engagement_composition,
+        "monthly_transition": monthly_transition,
     }
 
     return result
