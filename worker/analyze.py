@@ -114,15 +114,21 @@ def analyze_period(
             mom_change[key] = None
 
     # 投稿別データ（全件、再生数降順）
+    # operation_month 指定時は運用月のみでフィルタ（日付範囲は無視）
+    # それ以外は日付範囲でフィルタ
     posts_query = (
         supabase.table("posts")
         .select("*")
         .eq("client_id", client_id)
-        .gte("post_date", start_date)
-        .lte("post_date", end_date + "T23:59:59")
     )
     if operation_month:
         posts_query = posts_query.eq("operation_month", operation_month)
+    else:
+        posts_query = (
+            posts_query
+            .gte("post_date", start_date)
+            .lte("post_date", end_date + "T23:59:59")
+        )
     all_posts_result = posts_query.order("views", desc=True).execute()
     all_posts = [
         {
