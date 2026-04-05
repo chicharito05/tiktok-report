@@ -6,11 +6,14 @@ Usage:
     python worker/analyze.py --client inthegolf [--start-date 2026-03-01 --end-date 2026-03-31]
 """
 
+from __future__ import annotations
+
 import argparse
 import json
 import logging
 import sys
 from datetime import date, timedelta
+from typing import Optional
 
 from worker.normalize import get_supabase_client, resolve_client_id
 
@@ -114,7 +117,7 @@ def analyze_period(
     client_id: str,
     start_date: str,
     end_date: str,
-    operation_month: str | None = None,
+    operation_month: Optional[str] = None,
 ) -> dict:
     """期間指定の分析を実行する。
 
@@ -193,16 +196,21 @@ def analyze_period(
             mom_change[key] = None
 
     # 投稿別データ（全件、再生数降順）
-    # post_dateはJST(+09:00)で格納されているため、フィルタもJSTで指定
+    # operation_month指定時 → operation_monthのみでフィルタ（日付範囲は広い契約期間のため無視）
+    # operation_month未指定時 → 日付範囲でフィルタ
     posts_query = (
         supabase.table("posts")
         .select("*")
         .eq("client_id", client_id)
-        .gte("post_date", start_date + "T00:00:00+09:00")
-        .lte("post_date", end_date + "T23:59:59+09:00")
     )
     if operation_month:
         posts_query = posts_query.eq("operation_month", operation_month)
+    else:
+        posts_query = (
+            posts_query
+            .gte("post_date", start_date + "T00:00:00+09:00")
+            .lte("post_date", end_date + "T23:59:59+09:00")
+        )
     all_posts_result = posts_query.order("views", desc=True).execute()
     all_posts = [
         {
