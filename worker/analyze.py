@@ -193,13 +193,13 @@ def analyze_period(
             mom_change[key] = None
 
     # 投稿別データ（全件、再生数降順）
-    # 常に日付範囲でフィルタ + operation_month指定時は追加フィルタ
+    # post_dateはJST(+09:00)で格納されているため、フィルタもJSTで指定
     posts_query = (
         supabase.table("posts")
         .select("*")
         .eq("client_id", client_id)
-        .gte("post_date", start_date + "T00:00:00")
-        .lte("post_date", end_date + "T23:59:59")
+        .gte("post_date", start_date + "T00:00:00+09:00")
+        .lte("post_date", end_date + "T23:59:59+09:00")
     )
     if operation_month:
         posts_query = posts_query.eq("operation_month", operation_month)

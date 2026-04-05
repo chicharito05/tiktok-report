@@ -709,9 +709,9 @@ async def list_posts(
 
     query = supabase.table("posts").select("*").eq("client_id", client_id)
     if start_date:
-        query = query.gte("post_date", start_date)
+        query = query.gte("post_date", start_date + "T00:00:00+09:00")
     if end_date:
-        query = query.lte("post_date", end_date + "T23:59:59")
+        query = query.lte("post_date", end_date + "T23:59:59+09:00")
 
     result = query.order("post_date", desc=True).execute()
     return {"posts": result.data}
