@@ -15,6 +15,7 @@ import {
   RefreshCw,
   Eye,
   EyeOff,
+  Presentation,
 } from "lucide-react";
 import type { Client } from "@/lib/types";
 import { getDefaultDateRange } from "@/lib/utils";
@@ -80,6 +81,7 @@ export default function GenerateForm({
   const [reportId, setReportId] = useState<string | null>(null);
   const [htmlUrl, setHtmlUrl] = useState<string | null>(null);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [pptxUrl, setPptxUrl] = useState<string | null>(null);
   const [htmlContent, setHtmlContent] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -191,6 +193,7 @@ export default function GenerateForm({
       const data = await res.json();
       setReportId(data.report_id);
       if (data.html_url) setHtmlUrl(data.html_url);
+      if (data.pptx_url) setPptxUrl(data.pptx_url);
       if (data.summary) setSummary(data.summary);
 
       // → レビューフェーズへ
@@ -228,6 +231,7 @@ export default function GenerateForm({
       const data = await res.json();
       if (data.html_url) setHtmlUrl(data.html_url);
       if (data.pdf_url) setPdfUrl(data.pdf_url);
+      if (data.pptx_url) setPptxUrl(data.pptx_url);
 
       setPhase("done");
       showToast("success", "レポートを出力しました");
@@ -242,6 +246,7 @@ export default function GenerateForm({
     setReportId(null);
     setHtmlUrl(null);
     setPdfUrl(null);
+    setPptxUrl(null);
     setHtmlContent(null);
     setSummary(null);
     setBestPostAnalysis("");
@@ -585,6 +590,56 @@ export default function GenerateForm({
                   </div>
                 </div>
               )}
+
+              {/* 全投稿データ */}
+              {summary.all_posts?.length > 0 && (
+                <div>
+                  <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                    全投稿データ（{summary.all_posts.length}件）
+                  </h3>
+                  <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
+                    <table className="w-full text-xs">
+                      <thead className="sticky top-0 bg-white">
+                        <tr className="text-gray-400 border-b border-gray-200">
+                          <th className="text-left py-1.5 pr-3 font-medium">#</th>
+                          <th className="text-left py-1.5 pr-3 font-medium">タイトル</th>
+                          <th className="text-left py-1.5 pr-3 font-medium">投稿日</th>
+                          <th className="text-right py-1.5 pr-3 font-medium">再生数</th>
+                          <th className="text-right py-1.5 pr-3 font-medium">いいね</th>
+                          <th className="text-right py-1.5 pr-3 font-medium">コメント</th>
+                          <th className="text-right py-1.5 pr-3 font-medium">シェア</th>
+                          <th className="text-right py-1.5 pr-3 font-medium">ENG率</th>
+                          <th className="text-right py-1.5 pr-3 font-medium">視聴完了</th>
+                          <th className="text-right py-1.5 font-medium">2秒視聴</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                        {summary.all_posts.map((p: any, i: number) => (
+                          <tr key={i} className={`border-b border-gray-50 hover:bg-gray-50/50 ${i < 3 ? "bg-amber-50/30" : ""}`}>
+                            <td className="py-1.5 pr-3 text-gray-400 font-medium">{i + 1}</td>
+                            <td className="py-1.5 pr-3 text-gray-700 font-medium max-w-[220px] truncate">{p.caption}</td>
+                            <td className="py-1.5 pr-3 text-gray-400 whitespace-nowrap">{fmtDate(p.post_date)}</td>
+                            <td className="py-1.5 pr-3 text-right font-bold text-gray-800 tabular-nums">{fmtNum(p.views)}</td>
+                            <td className="py-1.5 pr-3 text-right text-gray-600 tabular-nums">{fmtNum(p.likes)}</td>
+                            <td className="py-1.5 pr-3 text-right text-gray-600 tabular-nums">{fmtNum(p.comments)}</td>
+                            <td className="py-1.5 pr-3 text-right text-gray-600 tabular-nums">{fmtNum(p.shares)}</td>
+                            <td className="py-1.5 pr-3 text-right text-gray-600 tabular-nums">
+                              {p.engagement_rate != null ? `${p.engagement_rate.toFixed(1)}%` : "--"}
+                            </td>
+                            <td className="py-1.5 pr-3 text-right text-gray-600 tabular-nums">
+                              {p.watch_through_rate != null ? `${p.watch_through_rate}%` : "--"}
+                            </td>
+                            <td className="py-1.5 text-right text-gray-600 tabular-nums">
+                              {p.two_sec_view_rate != null ? `${p.two_sec_view_rate}%` : "--"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -684,7 +739,7 @@ export default function GenerateForm({
             編集内容を反映してレポートを出力中...
           </p>
           <p className="text-xs text-gray-400 mt-1">
-            HTML・PDFを生成しています
+            Googleスライド用ファイルを生成しています
           </p>
         </div>
       )}
@@ -703,15 +758,15 @@ export default function GenerateForm({
           </p>
 
           <div className="flex items-center justify-center gap-3 mb-6">
-            {pdfUrl && (
+            {pptxUrl && (
               <a
-                href={pdfUrl}
+                href={pptxUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-2 px-6 py-3 gradient-accent text-white rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
               >
-                <Download size={16} />
-                PDFダウンロード
+                <Presentation size={16} />
+                Googleスライド用ダウンロード (.pptx)
               </a>
             )}
             {htmlUrl && (
@@ -723,6 +778,17 @@ export default function GenerateForm({
               >
                 <FileText size={16} />
                 HTML表示
+              </a>
+            )}
+            {pdfUrl && (
+              <a
+                href={pdfUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 px-4 py-3 border border-gray-200 text-gray-400 rounded-lg text-xs hover:bg-gray-50 transition-colors"
+              >
+                <Download size={14} />
+                PDF
               </a>
             )}
           </div>

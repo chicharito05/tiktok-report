@@ -243,7 +243,19 @@ def generate_report(
     html_path.write_text(html_content, encoding="utf-8")
     logger.info("HTML生成完了: %s", html_path)
 
-    # 6. PDF変換
+    # 6. PPTX生成（Googleスライド互換）
+    pptx_path = None
+    try:
+        from worker.report_gen_pptx import generate_pptx
+        pptx_path = output_dir / f"{file_prefix}_report.pptx"
+        generate_pptx(context, pptx_path)
+        logger.info("PPTX生成完了: %s", pptx_path)
+    except ImportError:
+        logger.warning("python-pptxがインストールされていません。HTMLのみ出力しました。")
+    except Exception as e:
+        logger.warning("PPTX生成に失敗しました: %s HTMLのみ出力しました。", e)
+
+    # PDF変換（後方互換のため残す）
     pdf_path = None
     try:
         from weasyprint import HTML
@@ -251,11 +263,9 @@ def generate_report(
         HTML(string=html_content, base_url=str(TEMPLATE_DIR)).write_pdf(str(pdf_path))
         logger.info("PDF生成完了: %s", pdf_path)
     except ImportError:
-        logger.warning(
-            "WeasyPrintがインストールされていません。HTMLのみ出力しました。"
-        )
+        pass
     except Exception as e:
-        logger.warning("PDF生成に失敗しました: %s HTMLのみ出力しました。", e)
+        logger.warning("PDF生成スキップ: %s", e)
 
     # 7. Supabase Storageアップロード & reportsテーブル記録
     if upload:
@@ -267,9 +277,23 @@ def generate_report(
             supabase.storage.from_("reports").remove([
                 f"{safe_prefix}/{start_date}_{end_date}_report.pdf",
                 f"{safe_prefix}/{start_date}_{end_date}_report.html",
+                f"{safe_prefix}/{start_date}_{end_date}_report.pptx",
             ])
         except Exception:
             pass  # 削除失敗は無視（ファイルが存在しない場合など）
+
+        # PPTXアップロード
+        if pptx_path and pptx_path.exists():
+            try:
+                pptx_storage = f"{safe_prefix}/{start_date}_{end_date}_report.pptx"
+                with open(pptx_path, "rb") as f:
+                    supabase.storage.from_("reports").upload(
+                        pptx_storage, f.read(),
+                        {"content-type": "application/vnd.openxmlformats-officedocument.presentationml.presentation"},
+                    )
+                logger.info("PPTXアップロード: %s", pptx_storage)
+            except Exception as e:
+                logger.warning("PPTXアップロードに失敗: %s", e)
 
         if pdf_path and pdf_path.exists():
             try:
@@ -347,9 +371,23 @@ def generate_report(
             for p in worst_posts[:3]
         ],
         "follower_growth": analysis.get("follower_growth"),
+        "all_posts": [
+            {
+                "caption": getattr(p, "caption", ""),
+                "post_date": getattr(p, "post_date", ""),
+                "views": getattr(p, "views", 0),
+                "likes": getattr(p, "likes", 0),
+                "comments": getattr(p, "comments", 0),
+                "shares": getattr(p, "shares", 0),
+                "engagement_rate": getattr(p, "engagement_rate", None),
+                "watch_through_rate": getattr(p, "watch_through_rate", None),
+                "two_sec_view_rate": getattr(p, "two_sec_view_rate", None),
+            }
+            for p in all_posts
+        ],
     }
 
-    return html_path, pdf_path, summary
+    return html_path, pdf_path, pptx_path, summary
 
 
 def main() -> None:

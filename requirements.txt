@@ -10,3 +10,4 @@ fastapi>=0.110.0
 uvicorn>=0.27.0
 python-multipart>=0.0.6
 notion-client>=2.0.0
+python-pptx>=1.0.0

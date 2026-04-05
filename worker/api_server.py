@@ -44,7 +44,9 @@ class GenerateReportResponse(BaseModel):
     report_id: Optional[str] = None
     html_path: str
     pdf_path: Optional[str] = None
+    pptx_path: Optional[str] = None
     html_url: Optional[str] = None
+    pptx_url: Optional[str] = None
     message: str
     summary: Optional[dict] = None
 
@@ -130,7 +132,7 @@ async def generate_report(req: GenerateReportRequest):
     logger.info("レポート生成開始: %s / %s〜%s", req.client_slug, start_date, end_date)
 
     try:
-        html_path, pdf_path, summary = run_generate(
+        html_path, pdf_path, pptx_path, summary = run_generate(
             req.client_slug, start_date, end_date, upload=True,
             user_commentary=req.user_commentary,
             operation_month=req.operation_month,
@@ -161,8 +163,9 @@ async def generate_report(req: GenerateReportRequest):
     except Exception:
         logger.warning("レポートID取得に失敗")
 
-    # HTML signed URL生成（プレビュー用）
+    # signed URL生成
     html_url = None
+    pptx_url = None
     try:
         supabase2 = get_supabase_client()
         cid = resolve_client_id(supabase2, req.client_slug)
@@ -173,11 +176,23 @@ async def generate_report(req: GenerateReportRequest):
     except Exception:
         logger.warning("HTML signed URL生成に失敗")
 
+    try:
+        supabase3 = get_supabase_client()
+        cid3 = resolve_client_id(supabase3, req.client_slug)
+        pptx_storage_path = f"reports/{cid3}/{start_date}_{end_date}_report.pptx"
+        signed_pptx = supabase3.storage.from_("reports").create_signed_url(pptx_storage_path, 3600)
+        if signed_pptx and signed_pptx.get("signedURL"):
+            pptx_url = signed_pptx["signedURL"]
+    except Exception:
+        logger.warning("PPTX signed URL生成に失敗")
+
     return GenerateReportResponse(
         report_id=report_id,
         html_path=str(html_path),
         pdf_path=str(pdf_path) if pdf_path else None,
+        pptx_path=str(pptx_path) if pptx_path else None,
         html_url=html_url,
+        pptx_url=pptx_url,
         message=f"レポート生成完了: {req.client_slug} / {start_date}〜{end_date}",
         summary=summary,
     )
@@ -220,7 +235,7 @@ async def regenerate_report(req: RegenerateReportRequest):
         except Exception:
             pass  # 削除失敗は無視
 
-        html_path, pdf_path, _summary = run_generate(
+        html_path, pdf_path, pptx_path, _summary = run_generate(
             client_name, start_date, end_date, upload=True,
             user_commentary=user_commentary,
         )
@@ -247,10 +262,20 @@ async def regenerate_report(req: RegenerateReportRequest):
     except Exception:
         pass
 
+    pptx_url = None
+    try:
+        pptx_storage_path = f"reports/{client_id}/{start_date}_{end_date}_report.pptx"
+        signed_pptx = supabase.storage.from_("reports").create_signed_url(pptx_storage_path, 3600)
+        if signed_pptx and signed_pptx.get("signedURL"):
+            pptx_url = signed_pptx["signedURL"]
+    except Exception:
+        pass
+
     return {
         "message": "レポートを再生成しました",
         "html_url": html_url,
         "pdf_url": pdf_url,
+        "pptx_url": pptx_url,
     }
 
 
