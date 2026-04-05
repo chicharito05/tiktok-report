@@ -196,6 +196,58 @@ def analyze_period(
     except Exception as e:
         logger.warning("フォロワーデータ取得に失敗: %s", e)
 
+    # 投稿の曜日別・時間帯別パフォーマンス
+    from datetime import datetime as dt_cls
+    day_of_week_stats: dict[str, dict] = {}
+    hour_stats: dict[int, dict] = {}
+    engagement_breakdown = {"likes": 0, "comments": 0, "shares": 0}
+
+    for p in all_posts:
+        try:
+            pd_str = p["post_date"]
+            parsed = dt_cls.fromisoformat(pd_str.replace("Z", "+00:00"))
+            weekday_names = ["月", "火", "水", "木", "金", "土", "日"]
+            wd = weekday_names[parsed.weekday()]
+            hr = parsed.hour
+
+            if wd not in day_of_week_stats:
+                day_of_week_stats[wd] = {"count": 0, "total_views": 0, "total_eng": 0}
+            day_of_week_stats[wd]["count"] += 1
+            day_of_week_stats[wd]["total_views"] += p.get("views", 0)
+            day_of_week_stats[wd]["total_eng"] += p.get("likes", 0) + p.get("comments", 0) + p.get("shares", 0)
+
+            if hr not in hour_stats:
+                hour_stats[hr] = {"count": 0, "total_views": 0}
+            hour_stats[hr]["count"] += 1
+            hour_stats[hr]["total_views"] += p.get("views", 0)
+        except (ValueError, TypeError):
+            pass
+
+        engagement_breakdown["likes"] += p.get("likes", 0)
+        engagement_breakdown["comments"] += p.get("comments", 0)
+        engagement_breakdown["shares"] += p.get("shares", 0)
+
+    # 曜日別平均再生数
+    day_of_week_perf = []
+    for wd in ["月", "火", "水", "木", "金", "土", "日"]:
+        s = day_of_week_stats.get(wd, {"count": 0, "total_views": 0, "total_eng": 0})
+        avg_views = round(s["total_views"] / s["count"]) if s["count"] > 0 else 0
+        day_of_week_perf.append({"day": wd, "count": s["count"], "avg_views": avg_views})
+
+    # 時間帯別平均再生数
+    hour_perf = []
+    for hr in sorted(hour_stats.keys()):
+        s = hour_stats[hr]
+        avg_views = round(s["total_views"] / s["count"]) if s["count"] > 0 else 0
+        hour_perf.append({"hour": hr, "count": s["count"], "avg_views": avg_views})
+
+    # エンゲージメント構成比
+    total_eng = sum(engagement_breakdown.values())
+    engagement_composition = {
+        k: round(v / total_eng * 100, 1) if total_eng > 0 else 0
+        for k, v in engagement_breakdown.items()
+    }
+
     result = {
         "start_date": start_date,
         "end_date": end_date,
@@ -212,6 +264,10 @@ def analyze_period(
         "daily_data": daily_data,
         "follower_data": follower_data,
         "follower_growth": follower_growth,
+        # 新規分析データ
+        "day_of_week_performance": day_of_week_perf,
+        "hour_performance": hour_perf,
+        "engagement_composition": engagement_composition,
     }
 
     return result

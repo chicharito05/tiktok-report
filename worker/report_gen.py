@@ -225,6 +225,10 @@ def generate_report(
         # フォロワー推移
         "follower_data": analysis.get("follower_data", []),
         "follower_growth": analysis.get("follower_growth"),
+        # 新規分析データ
+        "day_of_week_performance": analysis.get("day_of_week_performance", []),
+        "hour_performance": analysis.get("hour_performance", []),
+        "engagement_composition": analysis.get("engagement_composition", {}),
         # AI分析（総評・改善案）
         "ai_commentary": ai_commentary,
     }
@@ -436,9 +440,11 @@ def main() -> None:
     for slug in slugs:
         try:
             logger.info("=== レポート生成開始: %s / %s〜%s ===", slug, start_date, end_date)
-            html_path, pdf_path, _summary = generate_report(slug, start_date, end_date, args.upload)
+            html_path, pdf_path, pptx_path, _summary = generate_report(slug, start_date, end_date, args.upload)
             logger.info("=== レポート生成完了: %s ===", slug)
             logger.info("  HTML: %s", html_path)
+            if pptx_path:
+                logger.info("  PPTX: %s", pptx_path)
             if pdf_path:
                 logger.info("  PDF:  %s", pdf_path)
             success_count += 1
