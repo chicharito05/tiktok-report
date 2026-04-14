@@ -195,13 +195,21 @@ def analyze_period(
             operation_month, client_id,
         )
 
-    # --- KPI (daily_overview を有効期間で集計) ---
+    # --- KPI (daily_overview を有効期間で集計、なければ posts から集計) ---
     overview_data: list[dict] = []
     totals = {"video_views": 0, "profile_views": 0, "likes": 0, "comments": 0, "shares": 0}
     if effective_start_date and effective_end_date:
         overview_data, totals = _sum_daily_overview(
             supabase, client_id, effective_start_date, effective_end_date,
         )
+
+    # daily_overview にデータがない場合は posts テーブルから集計
+    if totals["video_views"] == 0 and all_posts:
+        logger.info("daily_overview にデータなし → posts テーブルから KPI を集計します")
+        totals["video_views"] = sum(p.get("views", 0) or 0 for p in all_posts)
+        totals["likes"] = sum(p.get("likes", 0) or 0 for p in all_posts)
+        totals["comments"] = sum(p.get("comments", 0) or 0 for p in all_posts)
+        totals["shares"] = sum(p.get("shares", 0) or 0 for p in all_posts)
 
     engagement_rate = 0.0
     if totals["video_views"] > 0:
@@ -226,6 +234,12 @@ def analyze_period(
             _, prev_totals = _sum_daily_overview(
                 supabase, client_id, prev_start_date, prev_end_date,
             )
+        # 前月も daily_overview がなければ posts から集計
+        if prev_totals["video_views"] == 0 and prev_posts:
+            prev_totals["video_views"] = sum(p.get("views", 0) or 0 for p in prev_posts)
+            prev_totals["likes"] = sum(p.get("likes", 0) or 0 for p in prev_posts)
+            prev_totals["comments"] = sum(p.get("comments", 0) or 0 for p in prev_posts)
+            prev_totals["shares"] = sum(p.get("shares", 0) or 0 for p in prev_posts)
 
     mom_change: dict[str, Optional[float]] = {}
     for key in ["video_views", "likes", "comments", "shares"]:

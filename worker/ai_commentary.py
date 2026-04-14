@@ -9,6 +9,7 @@ Usage:
 import argparse
 import json
 import logging
+import re
 import sys
 
 import anthropic
@@ -153,15 +154,20 @@ def generate_commentary(analysis_result: dict) -> dict:
     response_text = message.content[0].text.strip()
 
     # ```json ... ``` で囲まれている場合の処理
-    if response_text.startswith("```"):
+    if "```" in response_text:
         lines = response_text.split("\n")
         lines = [l for l in lines if not l.strip().startswith("```")]
-        response_text = "\n".join(lines)
+        response_text = "\n".join(lines).strip()
+
+    # JSON部分を抽出（前後に余計なテキストがある場合に対応）
+    json_match = re.search(r'\{[\s\S]*\}', response_text)
+    if json_match:
+        response_text = json_match.group(0)
 
     try:
         commentary = json.loads(response_text)
     except json.JSONDecodeError:
-        logger.error("JSONパース失敗。レスポンス:\n%s", response_text)
+        logger.error("JSONパース失敗。レスポンス:\n%s", response_text[:2000])
         return {
             "best_post_analysis": "分析コメントの生成に失敗しました。",
             "improvement_suggestions": "分析コメントの生成に失敗しました。",
