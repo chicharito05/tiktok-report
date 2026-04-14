@@ -206,7 +206,10 @@ export default function GenerateForm({
   // Step 3: レポート出力（編集反映 → 最終PDF生成）
   // ============================================================
   const handleExport = async () => {
-    if (!reportId) return;
+    if (!reportId) {
+      showToast("error", "レポートIDが見つかりません。レポートを再作成してください。");
+      return;
+    }
     setPhase("exporting");
 
     try {

@@ -205,7 +205,7 @@ async def regenerate_report(req: RegenerateReportRequest):
     # report_idからレポート情報を取得
     result = (
         supabase.table("reports")
-        .select("*, clients(name, slug, id)")
+        .select("*, clients(name, id)")
         .eq("id", req.report_id)
         .single()
         .execute()
@@ -214,7 +214,7 @@ async def regenerate_report(req: RegenerateReportRequest):
         raise HTTPException(status_code=404, detail="レポートが見つかりません")
 
     report = result.data
-    client_slug = report["clients"].get("slug") or report["clients"]["name"]
+    client_slug = report["clients"]["name"]
     client_id = report["client_id"]
     operation_month = report.get("operation_month")
     if not operation_month:
