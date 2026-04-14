@@ -33,8 +33,9 @@ export interface Post {
 export interface Report {
   id: string;
   client_id: string;
-  start_date: string;
-  end_date: string;
+  operation_month: string;
+  start_date: string | null;
+  end_date: string | null;
   generated_by: string | null;
   file_path: string | null;
   generated_at: string;

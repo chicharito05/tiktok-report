@@ -14,7 +14,7 @@ import sys
 import anthropic
 from dotenv import load_dotenv
 
-from worker.analyze import analyze_period, get_default_date_range
+from worker.analyze import analyze_period
 from worker.normalize import get_supabase_client, resolve_client_id
 
 load_dotenv(override=True)
@@ -168,28 +168,20 @@ def main() -> None:
     )
     parser.add_argument(
         "--client", required=True,
-        help="クライアントslug（例: inthegolf）",
+        help="クライアントslug（例: bestlife）",
     )
     parser.add_argument(
-        "--start-date", default=None,
-        help="開始日（YYYY-MM-DD形式）",
-    )
-    parser.add_argument(
-        "--end-date", default=None,
-        help="終了日（YYYY-MM-DD形式）",
+        "--operation-month", required=True,
+        help="運用月ラベル（例: 1ヶ月目）",
     )
     args = parser.parse_args()
 
-    if args.start_date and args.end_date:
-        start_date, end_date = args.start_date, args.end_date
-    else:
-        start_date, end_date = get_default_date_range()
-    logger.info("AI考察コメント生成: %s / %s〜%s", args.client, start_date, end_date)
+    logger.info("AI考察コメント生成: %s / %s", args.client, args.operation_month)
 
     try:
         supabase = get_supabase_client()
         client_id = resolve_client_id(supabase, args.client)
-        analysis = analyze_period(supabase, client_id, start_date, end_date)
+        analysis = analyze_period(supabase, client_id, args.operation_month)
     except Exception:
         logger.exception("データ取得中にエラーが発生しました")
         sys.exit(1)

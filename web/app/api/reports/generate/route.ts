@@ -4,7 +4,7 @@ import { getWorkerApiUrl } from "@/lib/utils";
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { client_slug, start_date, end_date, user_commentary, operation_month } = body;
+    const { client_slug, user_commentary, operation_month } = body;
 
     if (!client_slug) {
       return NextResponse.json(
@@ -13,11 +13,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (!operation_month) {
+      return NextResponse.json(
+        { error: "運用月を指定してください" },
+        { status: 400 }
+      );
+    }
+
     const workerUrl = getWorkerApiUrl();
     const res = await fetch(`${workerUrl}/generate-report`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ client_slug, start_date, end_date, user_commentary, operation_month }),
+      body: JSON.stringify({ client_slug, operation_month, user_commentary }),
     });
 
     if (!res.ok) {

@@ -18,8 +18,9 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
 
-from worker.analyze import analyze_period, get_default_date_range
+from worker.analyze import analyze_period
 from worker.normalize import get_supabase_client, resolve_client_id
+from worker.report_gen import _slugify_operation_month
 
 load_dotenv(override=True)
 logging.basicConfig(
@@ -33,9 +34,7 @@ app = FastAPI(title="TikTok Report Worker API", version="2.0.0")
 
 class GenerateReportRequest(BaseModel):
     client_slug: str
-    start_date: Optional[str] = None  # YYYY-MM-DD
-    end_date: Optional[str] = None    # YYYY-MM-DD
-    operation_month: Optional[str] = None  # 運用月フィルタ（例: "1ヶ月目"）
+    operation_month: str  # 運用月ラベル（例: "1ヶ月目"）。必須。
     # ユーザー入力の総評・改善案（空ならAI自動生成）
     user_commentary: Optional[dict] = None  # {best_post_analysis, improvement_suggestions, next_month_plan}
 
@@ -121,27 +120,26 @@ async def health_check():
 
 @app.post("/generate-report", response_model=GenerateReportResponse)
 async def generate_report(req: GenerateReportRequest):
-    """report_gen.pyを呼び出してレポートを生成する。"""
+    """report_gen.pyを呼び出してレポートを生成する（運用月ベース）。"""
     from worker.report_gen import generate_report as run_generate
 
-    if req.start_date and req.end_date:
-        start_date, end_date = req.start_date, req.end_date
-    else:
-        start_date, end_date = get_default_date_range()
+    if not req.operation_month:
+        raise HTTPException(status_code=400, detail="operation_month は必須です")
 
-    logger.info("レポート生成開始: %s / %s〜%s", req.client_slug, start_date, end_date)
+    logger.info("レポート生成開始: %s / %s", req.client_slug, req.operation_month)
 
     try:
         html_path, pdf_path, pptx_path, summary = run_generate(
-            req.client_slug, start_date, end_date, upload=True,
+            req.client_slug, req.operation_month, upload=True,
             user_commentary=req.user_commentary,
-            operation_month=req.operation_month,
         )
-    except RuntimeError as e:
+    except (ValueError, RuntimeError) as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.exception("レポート生成エラー")
         raise HTTPException(status_code=500, detail=f"レポート生成に失敗しました: {e}")
+
+    op_slug = _slugify_operation_month(req.operation_month)
 
     # reportsテーブルから最新のレポートIDを取得
     report_id = None
@@ -152,8 +150,7 @@ async def generate_report(req: GenerateReportRequest):
             supabase.table("reports")
             .select("id")
             .eq("client_id", client_id)
-            .eq("start_date", start_date)
-            .eq("end_date", end_date)
+            .eq("operation_month", req.operation_month)
             .order("generated_at", desc=True)
             .limit(1)
             .execute()
@@ -169,7 +166,7 @@ async def generate_report(req: GenerateReportRequest):
     try:
         supabase2 = get_supabase_client()
         cid = resolve_client_id(supabase2, req.client_slug)
-        html_storage_path = f"reports/{cid}/{start_date}_{end_date}_report.html"
+        html_storage_path = f"reports/{cid}/{op_slug}_report.html"
         signed = supabase2.storage.from_("reports").create_signed_url(html_storage_path, 3600)
         if signed and signed.get("signedURL"):
             html_url = signed["signedURL"]
@@ -179,7 +176,7 @@ async def generate_report(req: GenerateReportRequest):
     try:
         supabase3 = get_supabase_client()
         cid3 = resolve_client_id(supabase3, req.client_slug)
-        pptx_storage_path = f"reports/{cid3}/{start_date}_{end_date}_report.pptx"
+        pptx_storage_path = f"reports/{cid3}/{op_slug}_report.pptx"
         signed_pptx = supabase3.storage.from_("reports").create_signed_url(pptx_storage_path, 3600)
         if signed_pptx and signed_pptx.get("signedURL"):
             pptx_url = signed_pptx["signedURL"]
@@ -193,7 +190,7 @@ async def generate_report(req: GenerateReportRequest):
         pptx_path=str(pptx_path) if pptx_path else None,
         html_url=html_url,
         pptx_url=pptx_url,
-        message=f"レポート生成完了: {req.client_slug} / {start_date}〜{end_date}",
+        message=f"レポート生成完了: {req.client_slug} / {req.operation_month}",
         summary=summary,
     )
 
@@ -206,15 +203,25 @@ async def regenerate_report(req: RegenerateReportRequest):
     supabase = get_supabase_client()
 
     # report_idからレポート情報を取得
-    result = supabase.table("reports").select("*, clients(name, id)").eq("id", req.report_id).single().execute()
+    result = (
+        supabase.table("reports")
+        .select("*, clients(name, slug, id)")
+        .eq("id", req.report_id)
+        .single()
+        .execute()
+    )
     if not result.data:
         raise HTTPException(status_code=404, detail="レポートが見つかりません")
 
     report = result.data
-    client_name = report["clients"]["name"]
+    client_slug = report["clients"].get("slug") or report["clients"]["name"]
     client_id = report["client_id"]
-    start_date = report["start_date"]
-    end_date = report["end_date"]
+    operation_month = report.get("operation_month")
+    if not operation_month:
+        raise HTTPException(
+            status_code=400,
+            detail="このレポートには operation_month が記録されていないため再生成できません",
+        )
 
     user_commentary = {
         "best_post_analysis": req.best_post_analysis,
@@ -222,23 +229,28 @@ async def regenerate_report(req: RegenerateReportRequest):
         "next_month_plan": req.next_month_plan,
     }
 
-    logger.info("レポート再生成: %s / %s〜%s", client_name, start_date, end_date)
+    logger.info("レポート再生成: %s / %s", client_slug, operation_month)
+
+    op_slug = _slugify_operation_month(operation_month)
 
     try:
         # 古いStorageファイルを削除してから再アップロード
         try:
             safe_prefix = f"reports/{client_id}"
             supabase.storage.from_("reports").remove([
-                f"{safe_prefix}/{start_date}_{end_date}_report.html",
-                f"{safe_prefix}/{start_date}_{end_date}_report.pdf",
+                f"{safe_prefix}/{op_slug}_report.html",
+                f"{safe_prefix}/{op_slug}_report.pdf",
+                f"{safe_prefix}/{op_slug}_report.pptx",
             ])
         except Exception:
             pass  # 削除失敗は無視
 
         html_path, pdf_path, pptx_path, _summary = run_generate(
-            client_name, start_date, end_date, upload=True,
+            client_slug, operation_month, upload=True,
             user_commentary=user_commentary,
         )
+    except (ValueError, RuntimeError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.exception("レポート再生成エラー")
         raise HTTPException(status_code=500, detail=f"再生成に失敗しました: {e}")
@@ -246,8 +258,9 @@ async def regenerate_report(req: RegenerateReportRequest):
     # signed URL生成
     html_url = None
     pdf_url = None
+    pptx_url = None
     try:
-        html_storage_path = f"reports/{client_id}/{start_date}_{end_date}_report.html"
+        html_storage_path = f"reports/{client_id}/{op_slug}_report.html"
         signed = supabase.storage.from_("reports").create_signed_url(html_storage_path, 3600)
         if signed and signed.get("signedURL"):
             html_url = signed["signedURL"]
@@ -255,16 +268,15 @@ async def regenerate_report(req: RegenerateReportRequest):
         pass
 
     try:
-        pdf_storage_path = f"reports/{client_id}/{start_date}_{end_date}_report.pdf"
+        pdf_storage_path = f"reports/{client_id}/{op_slug}_report.pdf"
         signed = supabase.storage.from_("reports").create_signed_url(pdf_storage_path, 3600)
         if signed and signed.get("signedURL"):
             pdf_url = signed["signedURL"]
     except Exception:
         pass
 
-    pptx_url = None
     try:
-        pptx_storage_path = f"reports/{client_id}/{start_date}_{end_date}_report.pptx"
+        pptx_storage_path = f"reports/{client_id}/{op_slug}_report.pptx"
         signed_pptx = supabase.storage.from_("reports").create_signed_url(pptx_storage_path, 3600)
         if signed_pptx and signed_pptx.get("signedURL"):
             pptx_url = signed_pptx["signedURL"]

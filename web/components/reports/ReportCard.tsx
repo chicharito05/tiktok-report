@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Eye, Download, Trash2 } from "lucide-react";
 import type { Report } from "@/lib/types";
-import { formatDate, formatDateRange } from "@/lib/utils";
+import { formatDate } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 
 interface ReportCardProps {
@@ -38,7 +38,7 @@ export default function ReportCard({
       </td>
       <td className="py-3.5 px-4">
         <span className="text-xs bg-gray-100 text-gray-600 px-2.5 py-1 rounded-lg">
-          {formatDateRange(report.start_date, report.end_date)}
+          {report.operation_month || "-"}
         </span>
       </td>
       <td className="py-3.5 px-4 text-gray-400 text-xs">

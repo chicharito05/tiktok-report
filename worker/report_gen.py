@@ -1,18 +1,22 @@
 """レポート生成統合スクリプト
 
-全モジュールを統合し、1コマンドでレポート（HTML + PDF）を生成する。
+全モジュールを統合し、1コマンドでレポート（HTML + PDF + PPTX）を生成する。
+
+本ツールは Notion 連携を前提とし、投稿の `operation_month`
+（例: "1ヶ月目"）で対象を切り出す。日付範囲は該当運用月に属する
+投稿の post_date から自動導出される。
 
 Usage:
-    python worker/report_gen.py --client inthegolf [--start-date 2026-03-01 --end-date 2026-03-31]
-    python worker/report_gen.py --all
-    python worker/report_gen.py --client inthegolf --upload
+    python worker/report_gen.py --client bestlife --operation-month "1ヶ月目"
+    python worker/report_gen.py --all --operation-month "1ヶ月目"
+    python worker/report_gen.py --client bestlife --operation-month "1ヶ月目" --upload
 """
 
 from __future__ import annotations
 
 import argparse
 import logging
-import os
+import re
 import sys
 from datetime import date, datetime
 from pathlib import Path
@@ -22,7 +26,7 @@ import yaml
 from dotenv import load_dotenv
 from jinja2 import Environment, FileSystemLoader
 
-from worker.analyze import analyze_period, get_default_date_range
+from worker.analyze import analyze_period
 from worker.normalize import get_supabase_client, resolve_client_id
 
 load_dotenv(override=True)
@@ -35,6 +39,18 @@ logger = logging.getLogger(__name__)
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 TEMPLATE_DIR = PROJECT_ROOT / "templates"
 OUTPUT_DIR = PROJECT_ROOT / "output"
+
+
+def _slugify_operation_month(operation_month: str) -> str:
+    """運用月ラベルをファイル名・URL セーフな slug に正規化する。
+
+    例: "1ヶ月目" → "month01", "12ヶ月目" → "month12"
+    数字が取れない場合は英数以外を _ に置換したフォールバックを返す。
+    """
+    m = re.search(r"(\d+)", operation_month or "")
+    if m:
+        return f"month{int(m.group(1)):02d}"
+    return re.sub(r"[^A-Za-z0-9]+", "_", (operation_month or "month").strip()).strip("_")
 
 
 def _format_date_range_japanese(start_date: str, end_date: str) -> str:
@@ -120,23 +136,24 @@ def generate_ai_commentary(analysis: dict) -> dict:
 
 def generate_report(
     client_slug: str,
-    start_date: str,
-    end_date: str,
+    operation_month: str,
     upload: bool = False,
     user_commentary: dict | None = None,
-    operation_month: str | None = None,
-) -> tuple[Path, Path | None]:
-    """指定クライアント・期間のレポートを生成する。
+) -> tuple[Path, Path | None, Path | None, dict]:
+    """指定クライアント・運用月のレポートを生成する。
 
     Args:
-        client_slug: クライアントslug
-        start_date: 開始日 (YYYY-MM-DD)
-        end_date: 終了日 (YYYY-MM-DD)
+        client_slug: クライアントslug または UUID
+        operation_month: 運用月ラベル（例: "1ヶ月目"）。必須。
         upload: Supabase Storageにアップロードするか
+        user_commentary: ユーザー入力の総評・改善案（空ならAI自動生成）
 
     Returns:
-        (HTMLファイルパス, PDFファイルパス or None)
+        (HTMLパス, PDFパス or None, PPTXパス or None, サマリーdict)
     """
+    if not operation_month:
+        raise ValueError("operation_month は必須です")
+
     supabase = get_supabase_client()
     client_id = resolve_client_id(supabase, client_slug)
 
@@ -150,16 +167,17 @@ def generate_report(
     )
     client_name = client_result.data["name"] if client_result.data else client_slug
 
-    # 1. データ分析
-    logger.info("データ分析中: %s / %s〜%s (運用月: %s)", client_slug, start_date, end_date, operation_month or "全て")
-    analysis = analyze_period(supabase, client_id, start_date, end_date, operation_month=operation_month)
+    # 1. データ分析（運用月ベース）
+    logger.info("データ分析中: %s / %s", client_slug, operation_month)
+    analysis = analyze_period(supabase, client_id, operation_month)
 
-    # データがない場合でも投稿データがあればレポート生成を許可
+    # 該当運用月に投稿がない場合はエラー
     has_posts = len(analysis.get("all_posts", [])) > 0
-    if analysis["days_with_data"] == 0 and not has_posts:
+    if not has_posts:
         raise RuntimeError(
-            f"データがありません。先にデータを取り込んでください。"
-            f"(client={client_slug}, period={start_date}〜{end_date})"
+            f"{operation_month} に紐づく投稿がありません。"
+            f"Notion側で「運用月」欄を設定したうえで /sync-notion を実行してください。"
+            f"(client={client_slug})"
         )
 
     # 2. AI考察コメント（ユーザー入力があればそちらを優先）
@@ -197,7 +215,16 @@ def generate_report(
     post_count = len(all_posts)
     avg_views_per_post = round(total_views / post_count) if post_count > 0 else None
 
-    period_display = _format_date_range_japanese(start_date, end_date)
+    # 有効期間（該当運用月の投稿 post_date から導出）
+    effective_start_date = analysis.get("effective_start_date")
+    effective_end_date = analysis.get("effective_end_date")
+    if effective_start_date and effective_end_date:
+        period_display = (
+            f"{operation_month}  "
+            f"{_format_date_range_japanese(effective_start_date, effective_end_date)}"
+        )
+    else:
+        period_display = operation_month
 
     context = {
         "client_name": client_name,
@@ -244,7 +271,8 @@ def generate_report(
     output_dir = OUTPUT_DIR / client_slug
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    file_prefix = f"{start_date}_{end_date}_{client_slug}"
+    op_slug = _slugify_operation_month(operation_month)
+    file_prefix = f"{client_slug}_{op_slug}"
     html_path = output_dir / f"{file_prefix}_report.html"
     html_path.write_text(html_content, encoding="utf-8")
     logger.info("HTML生成完了: %s", html_path)
@@ -281,9 +309,9 @@ def generate_report(
         # 既存ファイルを削除してから再アップロード（上書き対応）
         try:
             supabase.storage.from_("reports").remove([
-                f"{safe_prefix}/{start_date}_{end_date}_report.pdf",
-                f"{safe_prefix}/{start_date}_{end_date}_report.html",
-                f"{safe_prefix}/{start_date}_{end_date}_report.pptx",
+                f"{safe_prefix}/{op_slug}_report.pdf",
+                f"{safe_prefix}/{op_slug}_report.html",
+                f"{safe_prefix}/{op_slug}_report.pptx",
             ])
         except Exception:
             pass  # 削除失敗は無視（ファイルが存在しない場合など）
@@ -291,7 +319,7 @@ def generate_report(
         # PPTXアップロード
         if pptx_path and pptx_path.exists():
             try:
-                pptx_storage = f"{safe_prefix}/{start_date}_{end_date}_report.pptx"
+                pptx_storage = f"{safe_prefix}/{op_slug}_report.pptx"
                 with open(pptx_path, "rb") as f:
                     supabase.storage.from_("reports").upload(
                         pptx_storage, f.read(),
@@ -303,7 +331,7 @@ def generate_report(
 
         if pdf_path and pdf_path.exists():
             try:
-                storage_path = f"{safe_prefix}/{start_date}_{end_date}_report.pdf"
+                storage_path = f"{safe_prefix}/{op_slug}_report.pdf"
                 with open(pdf_path, "rb") as f:
                     supabase.storage.from_("reports").upload(
                         storage_path, f.read(),
@@ -314,7 +342,7 @@ def generate_report(
                 logger.warning("Storageアップロードに失敗: %s", e)
                 storage_path = None
 
-        html_storage_path = f"{safe_prefix}/{start_date}_{end_date}_report.html"
+        html_storage_path = f"{safe_prefix}/{op_slug}_report.html"
         try:
             supabase.storage.from_("reports").upload(
                 html_storage_path, html_content.encode("utf-8"),
@@ -324,12 +352,13 @@ def generate_report(
         except Exception as e:
             logger.warning("HTML Storageアップロードに失敗: %s", e)
 
-        # reportsテーブルに記録
+        # reportsテーブルに記録（operation_month + 派生した実データ範囲）
         try:
             supabase.table("reports").insert({
                 "client_id": client_id,
-                "start_date": start_date,
-                "end_date": end_date,
+                "operation_month": operation_month,
+                "start_date": effective_start_date,
+                "end_date": effective_end_date,
                 "file_path": storage_path or html_storage_path,
             }).execute()
             logger.info("reportsテーブルに記録しました")
@@ -339,6 +368,9 @@ def generate_report(
     # フロントエンド向けのサマリーデータを返す
     summary = {
         "client_name": client_name,
+        "operation_month": operation_month,
+        "effective_start_date": effective_start_date,
+        "effective_end_date": effective_end_date,
         "period": period_display,
         "total_views": total_views,
         "total_likes": totals["likes"],
@@ -398,23 +430,19 @@ def generate_report(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="TikTokレポートを生成する"
+        description="TikTokレポートを生成する（運用月ベース）"
     )
     parser.add_argument(
         "--client",
-        help="クライアントslug（例: inthegolf）",
+        help="クライアントslug または UUID（例: bestlife）",
     )
     parser.add_argument(
-        "--start-date", default=None,
-        help="開始日（YYYY-MM-DD形式）",
-    )
-    parser.add_argument(
-        "--end-date", default=None,
-        help="終了日（YYYY-MM-DD形式）",
+        "--operation-month", required=True,
+        help='運用月ラベル（例: "1ヶ月目"）。必須。',
     )
     parser.add_argument(
         "--all", action="store_true",
-        help="全クライアントのレポートを一括生成",
+        help="config/clients.yaml に登録済みの全クライアントを一括生成",
     )
     parser.add_argument(
         "--upload", action="store_true",
@@ -425,24 +453,23 @@ def main() -> None:
     if not args.client and not args.all:
         parser.error("--client または --all を指定してください")
 
-    if args.start_date and args.end_date:
-        start_date, end_date = args.start_date, args.end_date
-    else:
-        start_date, end_date = get_default_date_range()
-
     if args.all:
         config_path = PROJECT_ROOT / "config" / "clients.yaml"
         with open(config_path, encoding="utf-8") as f:
-            config = yaml.safe_load(f)
-        slugs = [c["slug"] for c in config["clients"]]
+            config = yaml.safe_load(f) or {}
+        slugs = [c["slug"] for c in (config.get("clients") or [])]
+        if not slugs:
+            parser.error("config/clients.yaml に登録済みのクライアントがいません")
     else:
         slugs = [args.client]
 
     success_count = 0
     for slug in slugs:
         try:
-            logger.info("=== レポート生成開始: %s / %s〜%s ===", slug, start_date, end_date)
-            html_path, pdf_path, pptx_path, _summary = generate_report(slug, start_date, end_date, args.upload)
+            logger.info("=== レポート生成開始: %s / %s ===", slug, args.operation_month)
+            html_path, pdf_path, pptx_path, _summary = generate_report(
+                slug, args.operation_month, upload=args.upload,
+            )
             logger.info("=== レポート生成完了: %s ===", slug)
             logger.info("  HTML: %s", html_path)
             if pptx_path:

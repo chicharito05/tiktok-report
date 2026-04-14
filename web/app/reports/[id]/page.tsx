@@ -3,7 +3,7 @@ import AuthGuard from "@/components/layout/AuthGuard";
 import ReportPreview from "@/components/reports/ReportPreview";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import type { Report } from "@/lib/types";
-import { formatDate, formatDateRange } from "@/lib/utils";
+import { formatDate } from "@/lib/utils";
 import Link from "next/link";
 import { PenLine } from "lucide-react";
 
@@ -50,7 +50,7 @@ export default async function ReportDetailPage({ params }: PageProps) {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-xl font-bold text-primary">
-              {report.clients?.name} - {formatDateRange(report.start_date, report.end_date)}
+              {report.clients?.name} - {report.operation_month || "-"}
             </h1>
             <p className="text-xs text-gray-400 mt-1">
               生成日: {formatDate(report.generated_at)} / 生成者:{" "}

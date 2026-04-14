@@ -18,7 +18,6 @@ import {
   Presentation,
 } from "lucide-react";
 import type { Client } from "@/lib/types";
-import { getDefaultDateRange } from "@/lib/utils";
 import { useToast } from "@/components/ui/Toast";
 
 function fmtNum(n: number | null | undefined): string {
@@ -62,7 +61,6 @@ export default function GenerateForm({
   clients,
   initialClient,
 }: GenerateFormProps) {
-  const defaultRange = getDefaultDateRange();
   const { showToast } = useToast();
 
   // --- Phase ---
@@ -72,8 +70,6 @@ export default function GenerateForm({
 
   // --- Input ---
   const [selectedClient, setSelectedClient] = useState(initialClient || "");
-  const [startDate, setStartDate] = useState(defaultRange.startDate);
-  const [endDate, setEndDate] = useState(defaultRange.endDate);
   const [operationMonth, setOperationMonth] = useState("");
   const [availableOperationMonths, setAvailableOperationMonths] = useState<string[]>([]);
 
@@ -160,6 +156,10 @@ export default function GenerateForm({
   // ============================================================
   const handleGenerate = async () => {
     if (!selectedClient) return;
+    if (!operationMonth) {
+      setErrorMsg("運用月を選択してください");
+      return;
+    }
     setPhase("generating");
     setGenStep("fetching");
     setErrorMsg("");
@@ -176,9 +176,7 @@ export default function GenerateForm({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           client_slug: selectedClient,
-          start_date: startDate,
-          end_date: endDate,
-          operation_month: operationMonth || undefined,
+          operation_month: operationMonth,
         }),
       });
 
@@ -335,60 +333,43 @@ export default function GenerateForm({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1.5">
-                開始日
-              </label>
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1.5">
+              運用月
+            </label>
+            <div className="relative">
+              <select
+                value={operationMonth}
+                onChange={(e) => setOperationMonth(e.target.value)}
+                disabled={!selectedClient || availableOperationMonths.length === 0}
+                className="w-full appearance-none px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent pr-8 disabled:bg-gray-50 disabled:text-gray-400"
+              >
+                <option value="">
+                  {selectedClient
+                    ? availableOperationMonths.length === 0
+                      ? "運用月タグ付きの投稿がありません"
+                      : "選択してください"
+                    : "先にクライアントを選択"}
+                </option>
+                {availableOperationMonths.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown
+                size={14}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
               />
             </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1.5">
-                終了日
-              </label>
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
-              />
-            </div>
+            <p className="text-[11px] text-gray-400 mt-1.5">
+              レポート対象期間は Notion 上の「運用月」タグで自動的に決まります。
+            </p>
           </div>
-
-          {availableOperationMonths.length > 0 && (
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1.5">
-                運用月で絞り込み（任意）
-              </label>
-              <div className="relative">
-                <select
-                  value={operationMonth}
-                  onChange={(e) => setOperationMonth(e.target.value)}
-                  className="w-full appearance-none px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent pr-8"
-                >
-                  <option value="">全運用月</option>
-                  {availableOperationMonths.map((m) => (
-                    <option key={m} value={m}>
-                      {m}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown
-                  size={14}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
-                />
-              </div>
-            </div>
-          )}
 
           <button
             onClick={handleGenerate}
-            disabled={!selectedClient}
+            disabled={!selectedClient || !operationMonth}
             className="w-full gradient-accent text-white py-3 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             <Sparkles size={16} />
@@ -437,7 +418,7 @@ export default function GenerateForm({
             {genSteps[genStepIndex]?.label || "処理中"}...
           </p>
           <p className="text-xs text-gray-400 text-center mt-2">
-            {selectedClient} / {startDate}〜{endDate}
+            {selectedClient} / {operationMonth}
           </p>
         </div>
       )}
@@ -754,7 +735,7 @@ export default function GenerateForm({
             レポート出力完了
           </p>
           <p className="text-xs text-gray-400 mb-6">
-            {selectedClient} / {startDate}〜{endDate}
+            {selectedClient} / {operationMonth}
           </p>
 
           <div className="flex items-center justify-center gap-3 mb-6">

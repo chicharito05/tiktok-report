@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { FileText, ArrowRight, Clock } from "lucide-react";
 import type { Report } from "@/lib/types";
-import { formatDate, formatDateRange } from "@/lib/utils";
+import { formatDate } from "@/lib/utils";
 
 interface RecentReportsProps {
   reports: Report[];
@@ -56,7 +56,7 @@ export default function RecentReports({ reports }: RecentReportsProps) {
                 {report.clients?.name || "不明"}
               </p>
               <p className="text-xs text-gray-400">
-                {formatDateRange(report.start_date, report.end_date)}
+                {report.operation_month || "-"}
               </p>
             </div>
             <div className="text-right shrink-0">

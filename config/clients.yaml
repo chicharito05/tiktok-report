@@ -1,16 +1,18 @@
-clients:
-  - slug: inthegolf
-    name: InTheGolf
-    tiktok_username: "@inthegolf"
-  - slug: kyuden
-    name: 九州電力送配電
-    tiktok_username: "@kyuden_td"
-  - slug: kai_city
-    name: 甲斐市
-    tiktok_username: "@kai_city"
-  - slug: dr_recella
-    name: Dr.Recella
-    tiktok_username: "@dr_recella"
-  - slug: sanix
-    name: Sanix
-    tiktok_username: "@sanix"
+# クライアント定義ファイル
+#
+# 本ツールは Notion 連携を前提とし、投稿の「運用月（N ヶ月目）」タグで
+# レポート期間を切り出す設計です。新規クライアントを追加する際は以下の
+# 手順で登録してください:
+#
+#   1. Supabase の clients テーブルに行を追加（notion_database_id も必須）
+#   2. このファイルに slug / name / tiktok_username を追記
+#   3. Notion 側で各投稿の「運用月」欄を "1ヶ月目" 等に設定
+#   4. /sync-notion を実行して posts を取り込む
+#
+# フォーマット例:
+# clients:
+#   - slug: bestlife
+#     name: ベストライフ
+#     tiktok_username: "@bestlife"
+
+clients: []

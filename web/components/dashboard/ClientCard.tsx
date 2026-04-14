@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { FileText, ExternalLink, Film } from "lucide-react";
 import type { Client, Report } from "@/lib/types";
-import { formatDateRange } from "@/lib/utils";
 
 interface ClientCardProps {
   client: Client;
@@ -42,7 +41,7 @@ export default function ClientCard({ client, latestReport, postCount }: ClientCa
           </span>
           {latestReport ? (
             <span className="text-emerald-600 font-medium text-xs bg-emerald-50 px-2 py-0.5 rounded-full">
-              {formatDateRange(latestReport.start_date, latestReport.end_date)}
+              {latestReport.operation_month || "-"}
             </span>
           ) : (
             <span className="text-gray-400 text-xs">未生成</span>

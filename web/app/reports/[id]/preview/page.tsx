@@ -3,7 +3,6 @@ import AuthGuard from "@/components/layout/AuthGuard";
 import ReportEditor from "./ReportEditor";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import type { Report } from "@/lib/types";
-import { formatDateRange } from "@/lib/utils";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -47,7 +46,7 @@ export default async function ReportPreviewPage({ params }: PageProps) {
   }
 
   const clientName = report.clients?.name || "不明";
-  const periodLabel = formatDateRange(report.start_date, report.end_date);
+  const periodLabel = report.operation_month || "-";
 
   return (
     <AuthGuard>
