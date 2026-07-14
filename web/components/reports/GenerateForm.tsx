@@ -11,10 +11,7 @@ import {
   Sparkles,
   FileOutput,
   ArrowRight,
-  Download,
   RefreshCw,
-  Eye,
-  EyeOff,
   Presentation,
 } from "lucide-react";
 import type { Client } from "@/lib/types";
@@ -75,11 +72,7 @@ export default function GenerateForm({
 
   // --- Generated report data ---
   const [reportId, setReportId] = useState<string | null>(null);
-  const [htmlUrl, setHtmlUrl] = useState<string | null>(null);
-  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [pptxUrl, setPptxUrl] = useState<string | null>(null);
-  const [htmlContent, setHtmlContent] = useState<string | null>(null);
-  const [showPreview, setShowPreview] = useState(false);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [summary, setSummary] = useState<any>(null);
 
@@ -113,43 +106,14 @@ export default function GenerateForm({
       .catch(() => setAvailableOperationMonths([]));
   }, [selectedClient, clients]);
 
-  // Load HTML content and extract commentary when htmlUrl changes
+  // AI コメンタリーを summary から抽出
   useEffect(() => {
-    if (!htmlUrl) return;
-    fetch(htmlUrl)
-      .then((res) => res.text())
-      .then((text) => {
-        setHtmlContent(text);
-        extractCommentaryFromHtml(text);
-      })
-      .catch(() => setHtmlContent(null));
-  }, [htmlUrl]);
-
-  /** HTMLからAIコメンタリーテキストを抽出 */
-  const extractCommentaryFromHtml = (html: string) => {
-    try {
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(html, "text/html");
-      const sections = doc.querySelectorAll(".commentary-text");
-      if (sections.length >= 3) {
-        setBestPostAnalysis(sections[0].textContent?.trim() || "");
-        setImprovementSuggestions(sections[1].textContent?.trim() || "");
-        setNextMonthPlan(sections[2].textContent?.trim() || "");
-      } else {
-        const pres = doc.querySelectorAll("pre");
-        const texts: string[] = [];
-        pres.forEach((pre) => {
-          const t = pre.textContent?.trim();
-          if (t && t !== "分析コメントの生成に失敗しました。") texts.push(t);
-        });
-        if (texts.length >= 1) setBestPostAnalysis(texts[0]);
-        if (texts.length >= 2) setImprovementSuggestions(texts[1]);
-        if (texts.length >= 3) setNextMonthPlan(texts[2]);
-      }
-    } catch {
-      // ignore
-    }
-  };
+    if (!summary?.ai_commentary) return;
+    const ai = summary.ai_commentary;
+    if (ai.best_post_analysis) setBestPostAnalysis(ai.best_post_analysis);
+    if (ai.improvement_suggestions) setImprovementSuggestions(ai.improvement_suggestions);
+    if (ai.next_month_plan) setNextMonthPlan(ai.next_month_plan);
+  }, [summary]);
 
   // ============================================================
   // Step 1: レポート作成依頼
@@ -190,7 +154,6 @@ export default function GenerateForm({
 
       const data = await res.json();
       setReportId(data.report_id);
-      if (data.html_url) setHtmlUrl(data.html_url);
       if (data.pptx_url) setPptxUrl(data.pptx_url);
       if (data.summary) setSummary(data.summary);
 
@@ -230,8 +193,6 @@ export default function GenerateForm({
       }
 
       const data = await res.json();
-      if (data.html_url) setHtmlUrl(data.html_url);
-      if (data.pdf_url) setPdfUrl(data.pdf_url);
       if (data.pptx_url) setPptxUrl(data.pptx_url);
 
       setPhase("done");
@@ -245,17 +206,13 @@ export default function GenerateForm({
   const handleReset = () => {
     setPhase("input");
     setReportId(null);
-    setHtmlUrl(null);
-    setPdfUrl(null);
     setPptxUrl(null);
-    setHtmlContent(null);
     setSummary(null);
     setBestPostAnalysis("");
     setImprovementSuggestions("");
     setNextMonthPlan("");
     setOperationMonth("");
     setErrorMsg("");
-    setShowPreview(false);
   };
 
   // ============================================================
@@ -438,13 +395,6 @@ export default function GenerateForm({
                 数値データを参照しながら、AIが生成した内容を確認・書き換えてください。
               </p>
             </div>
-            <button
-              onClick={() => setShowPreview(!showPreview)}
-              className="flex items-center gap-1.5 px-3 py-2 text-xs text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-            >
-              {showPreview ? <EyeOff size={14} /> : <Eye size={14} />}
-              {showPreview ? "プレビューを閉じる" : "プレビュー表示"}
-            </button>
           </div>
 
           {/* ===== データ参照パネル ===== */}
@@ -630,7 +580,7 @@ export default function GenerateForm({
           {/* ===== 編集エリア + プレビュー ===== */}
           <div className={`flex gap-5`}>
             {/* 編集パネル */}
-            <div className={`${showPreview ? "w-1/2" : "w-full"} space-y-4`}>
+            <div className="w-full space-y-4">
               <div className="bg-white rounded-xl border border-gray-200/80 p-5 space-y-4">
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-2">
@@ -691,26 +641,6 @@ export default function GenerateForm({
             </div>
 
             {/* プレビュー（トグル表示） */}
-            {showPreview && (
-              <div className="w-1/2">
-                <div className="bg-white rounded-xl border border-gray-200/80 overflow-hidden sticky top-20">
-                  {htmlContent ? (
-                    <iframe
-                      srcDoc={htmlContent}
-                      className="w-full border-0"
-                      style={{ height: "80vh" }}
-                      title="レポートプレビュー"
-                      sandbox="allow-same-origin allow-scripts"
-                    />
-                  ) : (
-                    <div className="flex items-center justify-center h-64 text-gray-400 text-sm">
-                      <Loader2 size={18} className="animate-spin mr-2" />
-                      プレビュー読み込み中...
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
           </div>
         </div>
       )}
@@ -751,28 +681,6 @@ export default function GenerateForm({
               >
                 <Presentation size={16} />
                 Googleスライド用ダウンロード (.pptx)
-              </a>
-            )}
-            {htmlUrl && (
-              <a
-                href={htmlUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-2 px-6 py-3 border border-gray-200 text-gray-600 rounded-lg text-sm hover:bg-gray-50 transition-colors"
-              >
-                <FileText size={16} />
-                HTML表示
-              </a>
-            )}
-            {pdfUrl && (
-              <a
-                href={pdfUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-2 px-4 py-3 border border-gray-200 text-gray-400 rounded-lg text-xs hover:bg-gray-50 transition-colors"
-              >
-                <Download size={14} />
-                PDF
               </a>
             )}
           </div>

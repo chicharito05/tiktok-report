@@ -16,6 +16,8 @@ from pptx.dml.color import RGBColor
 from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
 from pptx.enum.shapes import MSO_SHAPE
 
+from worker.chart_gen import generate_dow_chart, generate_hour_chart
+
 logger = logging.getLogger(__name__)
 
 # ── カラーパレット（洗練されたモノトーン + アクセント） ──
@@ -71,7 +73,7 @@ def _set_cell(cell, text: str, size: int = 10, bold: bool = False,
     run.font.size = Pt(size)
     run.font.bold = bold
     run.font.color.rgb = color
-    run.font.name = "Helvetica Neue"
+    run.font.name = "Noto Sans JP"
     cell.vertical_anchor = MSO_ANCHOR.MIDDLE
     cell.margin_left = Emu(63500)
     cell.margin_right = Emu(63500)
@@ -96,7 +98,7 @@ def _page_header(slide, cn: str, period: str):
     r.text = cn
     r.font.size = Pt(9)
     r.font.color.rgb = TEXT_MUTED
-    r.font.name = "Helvetica Neue"
+    r.font.name = "Noto Sans JP"
     r.font.bold = True
 
     tb2 = slide.shapes.add_textbox(Inches(9.5), Inches(0.3), Inches(3.2), Inches(0.3))
@@ -106,7 +108,7 @@ def _page_header(slide, cn: str, period: str):
     r2.text = period
     r2.font.size = Pt(9)
     r2.font.color.rgb = TEXT_MUTED
-    r2.font.name = "Helvetica Neue"
+    r2.font.name = "Noto Sans JP"
 
 
 def _section_title(slide, text: str, top: float = 0.85):
@@ -126,7 +128,7 @@ def _section_title(slide, text: str, top: float = 0.85):
     r.font.size = Pt(18)
     r.font.bold = True
     r.font.color.rgb = TEXT_PRIMARY
-    r.font.name = "Helvetica Neue"
+    r.font.name = "Noto Sans JP"
 
 
 def _kpi_card(slide, left: float, top: float, w: float, h: float,
@@ -155,7 +157,7 @@ def _kpi_card(slide, left: float, top: float, w: float, h: float,
     lr.text = label
     lr.font.size = Pt(8)
     lr.font.color.rgb = TEXT_MUTED
-    lr.font.name = "Helvetica Neue"
+    lr.font.name = "Noto Sans JP"
     lr.font.bold = True
 
     # 値
@@ -165,7 +167,7 @@ def _kpi_card(slide, left: float, top: float, w: float, h: float,
     vr.font.size = Pt(20)
     vr.font.bold = True
     vr.font.color.rgb = TEXT_PRIMARY
-    vr.font.name = "Helvetica Neue"
+    vr.font.name = "Noto Sans JP"
 
     # サブテキスト
     if sub:
@@ -175,7 +177,7 @@ def _kpi_card(slide, left: float, top: float, w: float, h: float,
         sr.font.size = Pt(8)
         sr.font.bold = True
         sr.font.color.rgb = POSITIVE if sub.startswith("+") else NEGATIVE if sub.startswith("-") else TEXT_MUTED
-        sr.font.name = "Helvetica Neue"
+        sr.font.name = "Noto Sans JP"
 
 
 def _ai_text_slide(prs, blank, cn: str, period: str,
@@ -225,7 +227,7 @@ def _ai_text_slide(prs, blank, cn: str, period: str,
         run.text = para_text.strip()
         run.font.size = Pt(12)
         run.font.color.rgb = TEXT_PRIMARY
-        run.font.name = "Helvetica Neue"
+        run.font.name = "Noto Sans JP"
 
     return slide
 
@@ -264,7 +266,7 @@ def generate_pptx(context: dict, output_path: Path) -> Path:
     sr.text = "TikTok Monthly Report"
     sr.font.size = Pt(14)
     sr.font.color.rgb = TEXT_MUTED
-    sr.font.name = "Helvetica Neue"
+    sr.font.name = "Noto Sans JP"
     sr.font.letter_spacing = Pt(2)
 
     # クライアント名
@@ -274,7 +276,7 @@ def generate_pptx(context: dict, output_path: Path) -> Path:
     tr1.font.size = Pt(40)
     tr1.font.color.rgb = WHITE
     tr1.font.bold = True
-    tr1.font.name = "Helvetica Neue"
+    tr1.font.name = "Noto Sans JP"
 
     # 期間
     p1 = s1.shapes.add_textbox(Inches(0.8), Inches(3.8), Inches(8), Inches(0.5))
@@ -282,7 +284,7 @@ def generate_pptx(context: dict, output_path: Path) -> Path:
     pr1.text = period
     pr1.font.size = Pt(16)
     pr1.font.color.rgb = TEXT_MUTED
-    pr1.font.name = "Helvetica Neue"
+    pr1.font.name = "Noto Sans JP"
 
     # 月間総括
     overall = ai.get("overall_assessment", "")
@@ -303,7 +305,7 @@ def generate_pptx(context: dict, output_path: Path) -> Path:
         orun.text = overall
         orun.font.size = Pt(12)
         orun.font.color.rgb = RGBColor(0x8B, 0x92, 0xA5)
-        orun.font.name = "Helvetica Neue"
+        orun.font.name = "Noto Sans JP"
 
     # 右下ブランド
     br = s1.shapes.add_textbox(Inches(10.5), Inches(6.6), Inches(2.3), Inches(0.4))
@@ -314,7 +316,7 @@ def generate_pptx(context: dict, output_path: Path) -> Path:
     brr.font.size = Pt(10)
     brr.font.color.rgb = RGBColor(0x40, 0x45, 0x55)
     brr.font.bold = True
-    brr.font.name = "Helvetica Neue"
+    brr.font.name = "Noto Sans JP"
     brr.font.letter_spacing = Pt(3)
 
     # ================================================================
@@ -376,7 +378,7 @@ def generate_pptx(context: dict, output_path: Path) -> Path:
     dlr.font.size = Pt(8)
     dlr.font.color.rgb = TEXT_MUTED
     dlr.font.bold = True
-    dlr.font.name = "Helvetica Neue"
+    dlr.font.name = "Noto Sans JP"
     dlr.font.letter_spacing = Pt(2)
 
     rows_data = [
@@ -526,7 +528,7 @@ def generate_pptx(context: dict, output_path: Path) -> Path:
             rr.font.size = Pt(14)
             rr.font.color.rgb = ACCENT
             rr.font.bold = True
-            rr.font.name = "Helvetica Neue"
+            rr.font.name = "Noto Sans JP"
 
             vb = s4.shapes.add_textbox(Inches(left + 1.0), Inches(top + 0.08), Inches(2.5), Inches(0.35))
             vtf = vb.text_frame
@@ -536,7 +538,7 @@ def generate_pptx(context: dict, output_path: Path) -> Path:
             vr.font.size = Pt(13)
             vr.font.bold = True
             vr.font.color.rgb = WHITE
-            vr.font.name = "Helvetica Neue"
+            vr.font.name = "Noto Sans JP"
 
             # タイトル
             caption = p.caption if len(p.caption) <= 45 else p.caption[:44] + "..."
@@ -547,7 +549,7 @@ def generate_pptx(context: dict, output_path: Path) -> Path:
             tr.text = caption
             tr.font.size = Pt(10)
             tr.font.color.rgb = TEXT_PRIMARY
-            tr.font.name = "Helvetica Neue"
+            tr.font.name = "Noto Sans JP"
 
             # メトリクス
             metrics = [
@@ -565,14 +567,14 @@ def generate_pptx(context: dict, output_path: Path) -> Path:
                 mvr.font.size = Pt(12)
                 mvr.font.bold = True
                 mvr.font.color.rgb = mclr
-                mvr.font.name = "Helvetica Neue"
+                mvr.font.name = "Noto Sans JP"
 
                 ml = s4.shapes.add_textbox(Inches(mx), Inches(my + 0.22), Inches(1.1), Inches(0.18))
                 mlr = ml.text_frame.paragraphs[0].add_run()
                 mlr.text = mlabel
                 mlr.font.size = Pt(7)
                 mlr.font.color.rgb = TEXT_MUTED
-                mlr.font.name = "Helvetica Neue"
+                mlr.font.name = "Noto Sans JP"
 
             # ENG率 + 日付
             eng = getattr(p, "engagement_rate", 0) or 0
@@ -581,7 +583,7 @@ def generate_pptx(context: dict, output_path: Path) -> Path:
             inf.text = f"ENG {eng:.1f}%  |  {getattr(p, 'post_date_display', '')}"
             inf.font.size = Pt(8)
             inf.font.color.rgb = TEXT_MUTED
-            inf.font.name = "Helvetica Neue"
+            inf.font.name = "Noto Sans JP"
 
     # ================================================================
     # P4b: ワースト投稿分析
@@ -598,7 +600,7 @@ def generate_pptx(context: dict, output_path: Path) -> Path:
         sr.text = "再生数下位 - 改善のヒントを見つける"
         sr.font.size = Pt(9)
         sr.font.color.rgb = TEXT_MUTED
-        sr.font.name = "Helvetica Neue"
+        sr.font.name = "Noto Sans JP"
 
         cols = ["タイトル", "投稿日", "再生数", "いいね", "コメント", "シェア", "ENG率"]
         col_w = [Inches(4.5), Inches(1.2), Inches(1.3), Inches(1.2), Inches(1.2), Inches(1.2), Inches(1.1)]
@@ -630,6 +632,36 @@ def generate_pptx(context: dict, output_path: Path) -> Path:
             eng = getattr(p, "engagement_rate", 0) or 0
             _set_cell(tbl.cell(ri, 6), f"{eng:.1f}%", size=9,
                       color=TEXT_SECONDARY, align=PP_ALIGN.CENTER, bg=row_bg)
+
+    # ================================================================
+    # P-DOW: 曜日別パフォーマンス
+    # ================================================================
+    dow_data = context.get("day_of_week_performance", [])
+    if dow_data:
+        s_dow = prs.slides.add_slide(blank)
+        _slide_bg(s_dow, SURFACE)
+        _page_header(s_dow, cn, period)
+        _section_title(s_dow, "曜日別パフォーマンス")
+
+        chart_buf = generate_dow_chart(dow_data)
+        s_dow.shapes.add_picture(
+            chart_buf, Inches(1.0), Inches(1.5), Inches(11.3), Inches(5.5),
+        )
+
+    # ================================================================
+    # P-HOUR: 時間帯別パフォーマンス
+    # ================================================================
+    hour_data = context.get("hour_performance", [])
+    if hour_data:
+        s_hour = prs.slides.add_slide(blank)
+        _slide_bg(s_hour, SURFACE)
+        _page_header(s_hour, cn, period)
+        _section_title(s_hour, "投稿時間帯別パフォーマンス")
+
+        chart_buf = generate_hour_chart(hour_data)
+        s_hour.shapes.add_picture(
+            chart_buf, Inches(0.5), Inches(1.5), Inches(12.3), Inches(5.5),
+        )
 
     # ================================================================
     # P5: 数値報告（月別推移）

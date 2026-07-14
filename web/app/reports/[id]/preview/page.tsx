@@ -22,27 +22,17 @@ export default async function ReportPreviewPage({ params }: PageProps) {
     notFound();
   }
 
-  // signed URL取得
-  let pdfUrl: string | null = null;
-  let htmlUrl: string | null = null;
+  // signed URL取得（PPTX）
+  let pptxUrl: string | null = null;
   if (report.file_path) {
-    const isPdf = report.file_path.endsWith(".pdf");
-    const pdfPath = isPdf
+    const pptxPath = report.file_path.endsWith(".pptx")
       ? report.file_path
-      : report.file_path.replace(".html", ".pdf");
-    const htmlPath = isPdf
-      ? report.file_path.replace(".pdf", ".html")
-      : report.file_path;
+      : report.file_path.replace(/\.(html|pdf)$/, ".pptx");
 
-    const { data: pdfData } = await supabase.storage
+    const { data: pptxData } = await supabase.storage
       .from("reports")
-      .createSignedUrl(pdfPath, 3600);
-    pdfUrl = pdfData?.signedUrl || null;
-
-    const { data: htmlData } = await supabase.storage
-      .from("reports")
-      .createSignedUrl(htmlPath, 3600);
-    htmlUrl = htmlData?.signedUrl || null;
+      .createSignedUrl(pptxPath, 3600);
+    pptxUrl = pptxData?.signedUrl || null;
   }
 
   const clientName = report.clients?.name || "不明";
@@ -54,8 +44,7 @@ export default async function ReportPreviewPage({ params }: PageProps) {
         reportId={report.id}
         clientName={clientName}
         periodLabel={periodLabel}
-        htmlUrl={htmlUrl}
-        pdfUrl={pdfUrl}
+        pptxUrl={pptxUrl}
       />
     </AuthGuard>
   );

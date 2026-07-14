@@ -25,23 +25,17 @@ export default async function ReportDetailPage({ params }: PageProps) {
     notFound();
   }
 
-  // signed URL取得
-  let pdfUrl: string | null = null;
-  let htmlUrl: string | null = null;
+  // signed URL取得（PPTX）
+  let pptxUrl: string | null = null;
   if (report.file_path) {
-    const isPdf = report.file_path.endsWith(".pdf");
-    const pdfPath = isPdf ? report.file_path : report.file_path.replace(".html", ".pdf");
-    const htmlPath = isPdf ? report.file_path.replace(".pdf", ".html") : report.file_path;
+    const pptxPath = report.file_path.endsWith(".pptx")
+      ? report.file_path
+      : report.file_path.replace(/\.(html|pdf)$/, ".pptx");
 
-    const { data: pdfData } = await supabase.storage
+    const { data: pptxData } = await supabase.storage
       .from("reports")
-      .createSignedUrl(pdfPath, 3600);
-    pdfUrl = pdfData?.signedUrl || null;
-
-    const { data: htmlData } = await supabase.storage
-      .from("reports")
-      .createSignedUrl(htmlPath, 3600);
-    htmlUrl = htmlData?.signedUrl || null;
+      .createSignedUrl(pptxPath, 3600);
+    pptxUrl = pptxData?.signedUrl || null;
   }
 
   return (
@@ -69,8 +63,7 @@ export default async function ReportDetailPage({ params }: PageProps) {
         </div>
 
         <ReportPreview
-          pdfUrl={pdfUrl}
-          htmlUrl={htmlUrl}
+          pptxUrl={pptxUrl}
           reportId={report.id}
         />
       </div>

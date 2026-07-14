@@ -24,7 +24,6 @@ from types import SimpleNamespace
 
 import yaml
 from dotenv import load_dotenv
-from jinja2 import Environment, FileSystemLoader
 
 from worker.analyze import analyze_period
 from worker.normalize import get_supabase_client, resolve_client_id
@@ -37,7 +36,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-TEMPLATE_DIR = PROJECT_ROOT / "templates"
 OUTPUT_DIR = PROJECT_ROOT / "output"
 
 
@@ -139,8 +137,8 @@ def generate_report(
     operation_month: str,
     upload: bool = False,
     user_commentary: dict | None = None,
-) -> tuple[Path, Path | None, Path | None, dict]:
-    """指定クライアント・運用月のレポートを生成する。
+) -> tuple[Path | None, dict]:
+    """指定クライアント・運用月のレポートを生成する（PPTX単一出力）。
 
     Args:
         client_slug: クライアントslug または UUID
@@ -149,7 +147,7 @@ def generate_report(
         user_commentary: ユーザー入力の総評・改善案（空ならAI自動生成）
 
     Returns:
-        (HTMLパス, PDFパス or None, PPTXパス or None, サマリーdict)
+        (PPTXパス or None, サマリーdict)
     """
     if not operation_month:
         raise ValueError("operation_month は必須です")
@@ -262,22 +260,14 @@ def generate_report(
         "ai_commentary": ai_commentary,
     }
 
-    # 5. HTML生成
-    env = Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)))
-    template = env.get_template("report_template.html")
-    html_content = template.render(**context)
-
-    # 出力ディレクトリ
+    # 5. 出力ディレクトリ
     output_dir = OUTPUT_DIR / client_slug
     output_dir.mkdir(parents=True, exist_ok=True)
 
     op_slug = _slugify_operation_month(operation_month)
     file_prefix = f"{client_slug}_{op_slug}"
-    html_path = output_dir / f"{file_prefix}_report.html"
-    html_path.write_text(html_content, encoding="utf-8")
-    logger.info("HTML生成完了: %s", html_path)
 
-    # 6. PPTX生成（Googleスライド互換）
+    # 6. PPTX生成（Googleスライド互換・単一出力フォーマット）
     pptx_path = None
     try:
         from worker.report_gen_pptx import generate_pptx
@@ -285,41 +275,24 @@ def generate_report(
         generate_pptx(context, pptx_path)
         logger.info("PPTX生成完了: %s", pptx_path)
     except ImportError:
-        logger.warning("python-pptxがインストールされていません。HTMLのみ出力しました。")
+        logger.error("python-pptxがインストールされていません。")
     except Exception as e:
-        logger.warning("PPTX生成に失敗しました: %s HTMLのみ出力しました。", e)
-
-    # PDF変換（後方互換のため残す）
-    pdf_path = None
-    try:
-        from weasyprint import HTML
-        pdf_path = output_dir / f"{file_prefix}_report.pdf"
-        HTML(string=html_content, base_url=str(TEMPLATE_DIR)).write_pdf(str(pdf_path))
-        logger.info("PDF生成完了: %s", pdf_path)
-    except ImportError:
-        pass
-    except Exception as e:
-        logger.warning("PDF生成スキップ: %s", e)
+        logger.error("PPTX生成に失敗しました: %s", e)
 
     # 7. Supabase Storageアップロード & reportsテーブル記録
     if upload:
         safe_prefix = f"reports/{client_id}"
-        storage_path = None
+        pptx_storage = f"{safe_prefix}/{op_slug}_report.pptx"
 
         # 既存ファイルを削除してから再アップロード（上書き対応）
         try:
-            supabase.storage.from_("reports").remove([
-                f"{safe_prefix}/{op_slug}_report.pdf",
-                f"{safe_prefix}/{op_slug}_report.html",
-                f"{safe_prefix}/{op_slug}_report.pptx",
-            ])
+            supabase.storage.from_("reports").remove([pptx_storage])
         except Exception:
-            pass  # 削除失敗は無視（ファイルが存在しない場合など）
+            pass
 
         # PPTXアップロード
         if pptx_path and pptx_path.exists():
             try:
-                pptx_storage = f"{safe_prefix}/{op_slug}_report.pptx"
                 with open(pptx_path, "rb") as f:
                     supabase.storage.from_("reports").upload(
                         pptx_storage, f.read(),
@@ -329,37 +302,14 @@ def generate_report(
             except Exception as e:
                 logger.warning("PPTXアップロードに失敗: %s", e)
 
-        if pdf_path and pdf_path.exists():
-            try:
-                storage_path = f"{safe_prefix}/{op_slug}_report.pdf"
-                with open(pdf_path, "rb") as f:
-                    supabase.storage.from_("reports").upload(
-                        storage_path, f.read(),
-                        {"content-type": "application/pdf"},
-                    )
-                logger.info("Supabase Storageにアップロード: %s", storage_path)
-            except Exception as e:
-                logger.warning("Storageアップロードに失敗: %s", e)
-                storage_path = None
-
-        html_storage_path = f"{safe_prefix}/{op_slug}_report.html"
-        try:
-            supabase.storage.from_("reports").upload(
-                html_storage_path, html_content.encode("utf-8"),
-                {"content-type": "text/html; charset=utf-8"},
-            )
-            logger.info("HTML Storageアップロード: %s", html_storage_path)
-        except Exception as e:
-            logger.warning("HTML Storageアップロードに失敗: %s", e)
-
-        # reportsテーブルに記録（operation_month + 派生した実データ範囲）
+        # reportsテーブルに記録
         try:
             supabase.table("reports").insert({
                 "client_id": client_id,
                 "operation_month": operation_month,
                 "start_date": effective_start_date,
                 "end_date": effective_end_date,
-                "file_path": storage_path or html_storage_path,
+                "file_path": pptx_storage,
             }).execute()
             logger.info("reportsテーブルに記録しました")
         except Exception as e:
@@ -385,6 +335,7 @@ def generate_report(
         "mom_likes": mom.get("likes"),
         "mom_comments": mom.get("comments"),
         "mom_shares": mom.get("shares"),
+        "ai_commentary": ai_commentary,
         "top_posts": [
             {
                 "caption": getattr(p, "caption", ""),
@@ -425,7 +376,7 @@ def generate_report(
         ],
     }
 
-    return html_path, pdf_path, pptx_path, summary
+    return pptx_path, summary
 
 
 def main() -> None:
@@ -467,15 +418,12 @@ def main() -> None:
     for slug in slugs:
         try:
             logger.info("=== レポート生成開始: %s / %s ===", slug, args.operation_month)
-            html_path, pdf_path, pptx_path, _summary = generate_report(
+            pptx_path, _summary = generate_report(
                 slug, args.operation_month, upload=args.upload,
             )
             logger.info("=== レポート生成完了: %s ===", slug)
-            logger.info("  HTML: %s", html_path)
             if pptx_path:
                 logger.info("  PPTX: %s", pptx_path)
-            if pdf_path:
-                logger.info("  PDF:  %s", pdf_path)
             success_count += 1
         except RuntimeError as e:
             logger.error("スキップ: %s - %s", slug, e)
